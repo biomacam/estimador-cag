@@ -59,7 +59,7 @@ Con el servicio corriendo, accede a la documentacion Swagger UI en:
 
 - **Error en  tests**
 Al ejecutar los tests con uv run pytest desde la consola me daba el error de que en "from app.main import app" app no existía. Tuve que ejectar uv run "python -m pytest" para que leyera la estructura de directorios desde el directorio actual.
-Al final lo he solucionado añadiendo [tool.pytest.ini_options] al pyproject.toml con el parámetro pythonpath = ["."]. Ahora ya puedo ejecutar directamente "uv python test"
+Al final lo he solucionado añadiendo [tool.pytest.ini_options] al pyproject.toml con el parámetro pythonpath = ["."]. Ahora ya puedo ejecutar directamente "uv run pytest"
 - **Error al hacer import structlog** 
 En algunos ficheros obutve este error y tras pedirle a la IA que me lo solucionara me creó la carpeta src\estimador_cag con el fichero _init_.py que me solucionó el error.
 - **Error en la pipeline**

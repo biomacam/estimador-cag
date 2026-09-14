@@ -67,7 +67,7 @@ app.include_router(estimations.router)
 @app.get("/health")
 async def health_check() -> dict:
     """Return service health status."""
-    settings = get_settings()
+    # settings = get_settings()
     return {
         "status": "healthy",
         "version": "0.1.0",
