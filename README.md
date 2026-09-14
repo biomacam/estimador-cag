@@ -62,3 +62,6 @@ Al ejecutar los tests con uv run pytest desde la consola me daba el error de que
 Al final lo he solucionado añadiendo [tool.pytest.ini_options] al pyproject.toml con el parámetro pythonpath = ["."]. Ahora ya puedo ejecutar directamente "uv python test"
 - **Error al hacer import structlog** 
 En algunos ficheros obutve este error y tras pedirle a la IA que me lo solucionara me creó la carpeta src\estimador_cag con el fichero _init_.py que me solucionó el error.
+- **Error en la pipeline**
+Comento la siguiente linea en main.py porque la pipeline si no no pasa ya que no subo en el repo el fichero .env con el ApiKey de OpenAI. Después de consultar con la IA, parece un porblema de diseño porque el test health debe probar que fastapi funciona correctamente, no que la configuración de OPENAI sea correcta, o que el servicio de OPENAI esté funcionando correctamente.
+    #    "environment": settings.APP_ENV,
