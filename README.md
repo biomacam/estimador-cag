@@ -13,3 +13,27 @@ Este enfoque es ideal para empezar porque:
 
 En modulos posteriores del master, este servicio evolucionara a una arquitectura **RAG** (Retrieval Augmented Generation) con base de datos vectorial para manejar un volumen mayor de ejemplos.
 
+## Requisitos previos
+
+- Una **API key** de OpenAI o Anthropic
+- Tener Python instalado
+
+## Estructura del proyecto
+
+```
+estimador-cag/
+├── app/
+│   ├── main.py            # Aplicacion FastAPI, health check, CORS
+│   ├── config.py           # Configuracion con Pydantic Settings
+│   ├── routers/
+│   │   └── estimations.py  # Endpoint POST /api/v1/estimate
+│   ├── services/
+│   │   └── llm_service.py  # Logica de negocio, llamadas al LLM
+│   ├── schemas/
+│   │   └── estimation.py   # Modelos Pydantic (request/response)
+│   └── context/
+│       └── examples.py     # Ejemplos de estimacion (contexto CAG)
+├── tests/
+│   └── test_health.py      # Tests basicos
+└── pyproject.toml          # Dependencias y configuracion
+```

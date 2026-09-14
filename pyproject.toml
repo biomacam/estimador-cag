@@ -9,11 +9,10 @@ dependencies = [
     "openai>=3.13.0",
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
+    "structlog",
     "uvicorn[standard]>=0.52.4",
 ]
 
-[project.scripts]
-estimador-cag = "estimador_cag:main"
 
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]
