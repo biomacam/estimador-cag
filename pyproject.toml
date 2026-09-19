@@ -5,10 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "anthropic>=1.7.0",
     "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "litellm>=1.83.0",
     "openai>=3.13.0",
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
+    "redis>=8.1.0",
+    "sse-starlette>=3.4.11",
+    "streamlit>=1.64.0",
     "structlog",
     "uvicorn[standard]>=0.52.4",
 ]
