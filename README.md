@@ -93,6 +93,3 @@ Comento la siguiente linea en main.py porque la pipeline si no no pasa ya que no
 
 - ** Python ** Apenas conozco python y eso me ha impedido un poco modificar el código por miedo a que dejar todo de funcionar, algunos cambios que intenté hacer  me rompían la compilación.
 
-## Sensaciones ##
-Aunque esto es un readme dejo este feedback sobre el ejercicio y en las siguientes ramas de próximas lecciones lo quitaré. Como primer ejercicio ha sido todfo un reto porque aparte de entender la arquitectura y el funcionamiento de la aplicación, el tema de la instalación del entorno de desarrollo con las dependencias me ha jugado alguna mala pasada (aún no sé porque he tenido que la carpeta src para evitar problemas con el import structlog). Soy nuevo en python, normalmente uso ADO, pero me he decidido por subir el repo a Github y además nunca había utilizado Docker porque en mi trabajo generalmente trabajamos con aplicaciones legacy de escritorio. Así que en cada paso me he ido encontrando con algún pequeño problema.
-Lo bueno es que he aprendido mucho y sé que para el próximo voy a tener que estructurarme mejor los días de dedicación, teniendo en cuenta que además he de estudiar el contenido de la próxima lección. He visto bastante salto cualitativo ente el ejercicio de la sesión 1 y el ejercicio de la sesión 2.
