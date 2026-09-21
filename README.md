@@ -76,20 +76,58 @@ Con el servicio corriendo, accede a la documentacion Swagger UI en:
 - **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
-## Problemas encontrados con el repo
+## Sesion 3 — LiteLLM, Redis cache, SSE y Streamlit
 
-- **Error en  tests**
-Al ejecutar los tests con uv run pytest desde la consola me daba el error de que en "from app.main import app" app no existía. Tuve que ejectar uv run "python -m pytest" para que leyera la estructura de directorios desde el directorio actual.
-Al final lo he solucionado añadiendo [tool.pytest.ini_options] al pyproject.toml con el parámetro pythonpath = ["."]. Ahora ya puedo ejecutar directamente "uv run pytest"
-- **Error al hacer import structlog** 
-En algunos ficheros obutve este error y tras pedirle a la IA que me lo solucionara me creó la carpeta src\estimador_cag con el fichero _init_.py que me solucionó el error.
-- **Error en la pipeline**
-Comento la siguiente linea en main.py porque la pipeline si no no pasa ya que no subo en el repo el fichero .env con el ApiKey de OpenAI. Después de consultar con la IA, parece un porblema de diseño porque el test health debe probar que fastapi funciona correctamente, no que la configuración de OPENAI sea correcta, o que el servicio de OPENAI esté funcionando correctamente.
-    #    "environment": settings.APP_ENV,
+A partir de la Sesion 3 el servicio incorpora una capa de wrapper sobre el LLM que anade:
 
-## Otros problemas que me he encontrado, y he superado!
+- **Fallback de proveedor** (LiteLLM Router) — si el modelo primario falla, se intenta el secundario
+- **Cache exact-match** en Redis — la misma transcripcion no vuelve a pagar tokens
+- **Streaming SSE** — endpoint `POST /api/v1/estimate/stream` que emite los tokens segun llegan
+- **UI Streamlit** — cliente real que consume el endpoint SSE
 
-- ** Docker ** He tendio problemas al hacer lel build de la imagen de docker, peor con la ayuda d ela IA he podido resolver los paths de configuración que me faltaban en el dockerfile
+### Arrancar la stack completa
 
-- ** Python ** Apenas conozco python y eso me ha impedido un poco modificar el código por miedo a que dejar todo de funcionar, algunos cambios que intenté hacer  me rompían la compilación.
+```bash
+cd estimator
+docker compose up --build
+# La API queda en http://localhost:8000 y Redis en redis://localhost:6379
+```
+
+### Probar el endpoint SSE
+
+Demo HTML: abrir [http://localhost:8000/static/sse_demo.html](http://localhost:8000/static/sse_demo.html).
+
+Desde CLI:
+```bash
+curl -N -X POST http://localhost:8000/api/v1/estimate/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}'
+```
+
+### Verificar la cache
+
+```bash
+# La misma peticion dos veces — la segunda devuelve cache_hit: true
+curl -s localhost:8000/api/v1/estimate -H 'Content-Type: application/json' \
+  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}' \
+  | jq '{cache_hit, cost_usd}'
+
+# Inspeccionar las claves en Redis
+docker compose exec redis redis-cli KEYS 'estimation:*'
+```
+
+### Streamlit
+
+Streamlit corre **fuera** de Docker y consume el endpoint SSE por HTTP:
+
+```bash
+cd estimator
+uv sync
+uv run streamlit run streamlit_app.py
+# Abrir http://localhost:8501
+```
+
+La URL del backend se lee de `ESTIMATOR_API_BASE_URL` (default `http://localhost:8000`).
+
+---
 
