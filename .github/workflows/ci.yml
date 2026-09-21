@@ -23,7 +23,7 @@ jobs:
     - name: Instalar dependencias
       run: |
         pip install -e .
-        pip install pytest
+        pip install pytest fakeredis
 
     - name: Ejecutar tests
       run: |
