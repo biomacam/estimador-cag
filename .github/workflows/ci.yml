@@ -10,6 +10,11 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    env:
+      # Dummy value: Settings requires at least one key to be set, but tests
+      # mock every LLM call, so no real provider request is ever made.
+      OPENAI_API_KEY: "test-key-for-ci"
+
     steps:
 
     - name: Descargar código
