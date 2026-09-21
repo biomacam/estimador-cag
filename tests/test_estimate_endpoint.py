@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from app.context.examples import CANONICAL_EXAMPLES
 from app.services import llm_service
 
+TOTAL_COST = CANONICAL_EXAMPLES[0].total_cost
+
 WELL_FORMED_MD = CANONICAL_EXAMPLES[0].estimation_markdown
 
 
@@ -63,6 +65,8 @@ def test_default_request_returns_validation(client: TestClient, call_log: list[d
     assert body["extracted_requirements"] is None
     assert body["cache_hit"] is False
     assert body["cost_usd"] == pytest.approx(0.001234)
+    assert body["annual_maintenance"] == pytest.approx(TOTAL_COST * 0.12)
+    assert "Annual maintenance" in body["estimation"]
     assert len(call_log) == 1
 
 

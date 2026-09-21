@@ -19,6 +19,26 @@ def _to_int(raw: str) -> int | None:
     return int(digits) if digits else None
 
 
+def extract_declared_total_cost(text: str) -> int | None:
+    """Parse the 'Total cost' figure declared in the estimation markdown."""
+    match = _TOTAL_COST_RE.search(text)
+    return _to_int(match.group(1)) if match else None
+
+
+_TOTAL_COST_LINE_RE = re.compile(
+    r"(^.*Total\s+cost[:\*\s]*[\d.,]+.*$)", re.IGNORECASE | re.MULTILINE
+)
+
+
+def inject_annual_maintenance_line(text: str, annual_maintenance: float) -> str:
+    """Insert an 'Annual maintenance' bullet right after the declared Total cost line."""
+    return _TOTAL_COST_LINE_RE.sub(
+        lambda m: f"{m.group(1)}\n- **Annual maintenance:** {annual_maintenance:,.2f} EUR",
+        text,
+        count=1,
+    )
+
+
 def evaluate_estimation_structure(text: str, finish_reason: str) -> StructureCheck:
     """Run the Level-1 structural checks against a generated estimation.
 
@@ -62,9 +82,8 @@ def evaluate_estimation_structure(text: str, finish_reason: str) -> StructureChe
             sum_cost = running_c
 
     m_h = _TOTAL_HOURS_RE.search(text)
-    m_c = _TOTAL_COST_RE.search(text)
     declared_total_hours = _to_int(m_h.group(1)) if m_h else None
-    declared_total_cost = _to_int(m_c.group(1)) if m_c else None
+    declared_total_cost = extract_declared_total_cost(text)
 
     hours_match: bool | None
     if sum_hours is not None and declared_total_hours is not None:

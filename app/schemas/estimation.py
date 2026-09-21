@@ -99,6 +99,10 @@ class EstimationResponse(BaseModel):
     # --- Session 3 � wrapper metadata (additive, defaults preserve Session 2 tests) ---
     cache_hit: bool = Field(default=False, description="True when the response came from Redis")
     cost_usd: float = Field(default=0.0, description="Estimated USD cost based on token usage")
+    annual_maintenance: float | None = Field(
+        default=None,
+        description="Annual maintenance amount: 12% of the declared total estimate cost",
+    )
 
 
 class StreamEstimationRequest(BaseModel):

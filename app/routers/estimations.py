@@ -15,7 +15,11 @@ from app.schemas.estimation import (
     EstimationResponse,
     StreamEstimationRequest,
 )
-from app.services.evaluation import evaluate_estimation_structure
+from app.services.evaluation import (
+    evaluate_estimation_structure,
+    extract_declared_total_cost,
+    inject_annual_maintenance_line,
+)
 from app.services.llm_service import (
     GenerationOptions,
     LLMServiceError,
@@ -54,7 +58,18 @@ async def create_estimation(request: EstimationRequest) -> EstimationResponse:
         else None
     )
 
-    return EstimationResponse(**result, validation=validation)
+    declared_total_cost = extract_declared_total_cost(result["estimation"])
+    annual_maintenance = (
+        round(declared_total_cost * 0.12, 2) if declared_total_cost is not None else None
+    )
+    if annual_maintenance is not None:
+        result["estimation"] = inject_annual_maintenance_line(
+            result["estimation"], annual_maintenance
+        )
+
+    return EstimationResponse(
+        **result, validation=validation, annual_maintenance=annual_maintenance
+    )
 
 
 @router.post("/estimate/stream")
@@ -89,13 +104,25 @@ async def create_estimation_stream(
                 log.error("estimate_stream_failed", error=str(exc), error_type=type(exc).__name__)
                 raise
 
+        full_text_parts: list[str] = []
         try:
             while True:
                 chunk = await loop.run_in_executor(None, _next_chunk)
                 if chunk is None:
                     break
                 if chunk:
+                    full_text_parts.append(chunk)
                     yield {"event": "token", "data": chunk}
+
+            # Full text is only known once streaming ends, so this is appended rather than inlined.
+            declared_total_cost = extract_declared_total_cost("".join(full_text_parts))
+            if declared_total_cost is not None:
+                annual_maintenance = round(declared_total_cost * 0.12, 2)
+                yield {
+                    "event": "token",
+                    "data": f"\n- **Annual maintenance:** {annual_maintenance:,.2f} EUR",
+                }
+
             yield {"event": "done", "data": "[DONE]"}
         except Exception as exc:  # noqa: BLE001
             yield {"event": "error", "data": str(exc)}

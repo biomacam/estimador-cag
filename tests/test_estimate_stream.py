@@ -94,3 +94,21 @@ def test_stream_endpoint_rejects_short_transcription() -> None:
         assert response.status_code == 422
     finally:
         app.dependency_overrides.pop(get_llm_wrapper, None)
+
+
+def test_stream_endpoint_appends_annual_maintenance_when_total_cost_present() -> None:
+    stub = _StubWrapper(chunks=["- **Total cost:** 10,000 EUR"])
+    app.dependency_overrides[get_llm_wrapper] = lambda: stub
+    try:
+        with TestClient(app) as client:
+            with client.stream(
+                "POST",
+                "/api/v1/estimate/stream",
+                json={"transcription": "x" * 60},
+            ) as response:
+                assert response.status_code == 200
+                body = b"".join(response.iter_bytes()).decode()
+        assert "Annual maintenance" in body
+        assert "1,200.00 EUR" in body
+    finally:
+        app.dependency_overrides.pop(get_llm_wrapper, None)
