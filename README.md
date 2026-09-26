@@ -76,6 +76,51 @@ Con el servicio corriendo, accede a la documentacion Swagger UI en:
 - **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
+## Arquitectura
+
+Este proyecto sigue una arquitectura en capas (Layered Architecture) con un patrón CAG (Context Augmented Generation) en la capa de negocio.
+
+```mermaid
+graph TB
+    subgraph L1["1. Bootstrap"]
+        MAIN[main.py<br/>FastAPI app, lifespan, logging, CORS]
+    end
+
+    subgraph L2["2. Presentation"]
+        ROUTER["routers/estimations.py<br/>POST /api/v1/estimate"]
+    end
+
+    subgraph L3["3. Contract / DTO"]
+        SCHEMA["schemas/estimation.py<br/>EstimationRequest / EstimationResponse"]
+    end
+
+    subgraph L4["4. Business Logic"]
+        SERVICE["services/llm_service.py<br/>generate_estimation / build_system_prompt"]
+    end
+
+    subgraph L5["5. Context (CAG)"]
+        CONTEXT["context/examples.py<br/>ESTIMATION_EXAMPLES"]
+    end
+
+    subgraph L7["7. External Providers"]
+        OPENAI[("OpenAI API")]
+        ANTHROPIC[("Anthropic API")]
+    end
+
+    subgraph CROSS["6. Cross-cutting"]
+        CONFIG["config.py<br/>Settings / get_settings()"]
+    end
+
+    MAIN --> ROUTER
+    ROUTER --> SCHEMA
+    ROUTER --> SERVICE
+    SERVICE --> CONTEXT
+    SERVICE --> OPENAI
+    SERVICE --> ANTHROPIC
+    ROUTER -.-> CONFIG
+    SERVICE -.-> CONFIG
+    MAIN -.-> CONFIG
+```
 ## Problemas encontrados con el repo
 
 - **Error en  tests**
