@@ -41,6 +41,10 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application source code.
 COPY app/ /app/app/
 
+# Streamlit client lives at the repo root, not under app/ — copied separately
+# so the same image can run either the API (default CMD) or the client.
+COPY streamlit_app.py /app/streamlit_app.py
+
 # Ensure the non-root user owns everything it needs to run.
 RUN chown -R appuser:appgroup /app
 
@@ -56,6 +60,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 USER appuser
 
 EXPOSE 8000
+# Streamlit's default port, used when this image runs the client instead
+# (docker-compose overrides CMD for that service).
+EXPOSE 8501
 
 # Docker-native health check. The orchestrator (Compose, Swarm, K8s) will
 # mark the container as unhealthy if this probe fails consecutively.

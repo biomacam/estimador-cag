@@ -1,107 +1,57 @@
-#Hace que las anotaciones de tipos se traten de una forma más flexible
 from __future__ import annotations
-#leer variables de entorno.
+
 import os
-#Iterator: expresar que la función va entregando varios textos progresivamente
-from collections.abc import Iterator
-#se comunica con FastAPI mediante HTTP
+
 import httpx
 import streamlit as st
-#cargar variables de entorno desde el archivo .env
 from dotenv import load_dotenv
 
 load_dotenv()
 API_BASE_URL = os.getenv("ESTIMATOR_API_BASE_URL", "http://localhost:8000")
-STREAM_ENDPOINT = f"{API_BASE_URL.rstrip('/')}/api/v1/estimate/stream"
+ESTIMATE_ENDPOINT = f"{API_BASE_URL.rstrip('/')}/api/v1/estimate"
 
-#dibujamos el título de la página
 st.set_page_config(page_title="Software Estimator", page_icon="📊")
 st.title("Software Estimator")
-st.caption(
-    "Paste a meeting transcription. The answer streams token by token from the "
-    "FastAPI service over Server-Sent Events."
-)
+st.caption("Describe your project and choose the level and format of the estimation.")
 
-def stream_estimation(transcription: str) -> Iterator[str]:
-    """POST to the SSE endpoint and yield text chunks as they arrive.
+with st.form("estimation_form"):
+    description = st.text_area("Project description", height=180, max_chars=2000)
+    project_type = st.selectbox(
+        "Project type",
+        options=["mobile_app", "web_saas", "internal_tool", "data_pipeline"],
+    )
+    detail_level = st.selectbox("Detail level", options=["summary", "medium", "detailed"])
+    output_format = st.selectbox(
+        "Output format",
+        options=["phases_table", "line_items", "narrative"],
+    )
+    submitted = st.form_submit_button("Estimate project")
 
-    Per the SSE spec, a single message with internal newlines is serialised as
-    multiple ``data:`` lines, and the client must join them with ``\\n`` to
-    reconstruct the original payload. A blank line terminates the message.
-    """
-    payload = {"transcription": transcription}
-    with httpx.stream(
-        "POST",
-        STREAM_ENDPOINT,
-        json=payload,
-        timeout=httpx.Timeout(120.0, connect=10.0),
-        headers={"Accept": "text/event-stream"},
-    ) as response:
+if submitted:
+    payload = {
+        "description": description,
+        "project_type": project_type,
+        "detail_level": detail_level,
+        "output_format": output_format,
+    }
+    try:
+        response = httpx.post(
+            ESTIMATE_ENDPOINT,
+            json=payload,
+            timeout=httpx.Timeout(120.0, connect=10.0),
+        )
         response.raise_for_status()
-        current_event = "token"
-        data_lines: list[str] = []
-        for raw_line in response.iter_lines():
-            if raw_line == "":
-                if data_lines:
-                    payload_text = "\n".join(data_lines)
-                    data_lines = []
-                    if current_event == "token":
-                        yield payload_text
-                    elif current_event == "error":
-                        yield f"\n\n[error] {payload_text}"
-                    elif current_event == "done":
-                        return
-                current_event = "token"
-                continue
-            if raw_line.startswith("event:"):
-                current_event = raw_line[6:].strip()
-            elif raw_line.startswith("data:"):
-                # The SSE spec defines exactly one space after `data:` as
-                # framing, not payload — preserve any further whitespace.
-                data_lines.append(
-                    raw_line[6:] if raw_line.startswith("data: ") else raw_line[5:]
-                )
-#esto hace que se persistan los mensajes en la sesión de Streamlit
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-#Cada vez que Streamlit vuelve a ejecutar el script, recorre el historial y vuelve a dibujar cada mensaje:
-
-#role="user": burbuja del usuario.
-#role="assistant": burbuja del asistente.
-#content: contenido en Markdown.
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("Paste your meeting transcription here..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        placeholder = st.empty()
-        full_response = ""
-        try:
-            for chunk in stream_estimation(prompt):
-                full_response += chunk
-                placeholder.markdown(full_response + "▍")
-            placeholder.markdown(full_response)
-        except httpx.HTTPError as exc:
-            full_response = f"Could not reach the estimator at `{STREAM_ENDPOINT}`: {exc}"
-            placeholder.error(full_response)
-        response = full_response
-
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        body = response.json()
+        st.markdown(body["text"])
+        st.caption(f"Prompt version: {body['prompt_version']}")
+    except httpx.HTTPError as exc:
+        st.error(f"Could not reach the estimator at `{ESTIMATE_ENDPOINT}`: {exc}")
 
 with st.sidebar:
     st.header("Service")
-    st.code(STREAM_ENDPOINT, language="text")
+    st.code(ESTIMATE_ENDPOINT, language="text")
     primary = os.getenv("PRIMARY_MODEL", "gpt-4o-mini")
     fallback = os.getenv("FALLBACK_MODEL", "claude-haiku-4-5-20251001")
     st.markdown(f"**Primary model:** `{primary}`")
     st.markdown(f"**Fallback model:** `{fallback}`")
     st.markdown(f"**Cache TTL:** `{os.getenv('CACHE_TTL', '86400')}s`")
-    if st.button("Clear chat history"):
-        st.session_state.messages = []
-        st.rerun()

@@ -6,28 +6,24 @@ from collections.abc import AsyncIterator
 
 import structlog
 #Depends implementa el sistema de inyección de dependencias de FastAPI.
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from litellm.exceptions import APIError as LLMProviderAPIError
 from sse_starlette.sse import EventSourceResponse
 
 from app.dependencies import get_llm_wrapper
+from app.prompts.loader import PromptVersionNotFoundError
 from app.schemas.estimation import (
     EstimationRequest,
     EstimationResponse,
     StreamEstimationRequest,
 )
-from app.services.evaluation import (
-    evaluate_estimation_structure,
-    extract_declared_total_cost,
-    inject_annual_maintenance_line,
-)
+from app.services.evaluation import extract_declared_total_cost
 from app.services.llm_service import (
     LLM_PROVIDER_ERROR_MESSAGE,
-    GenerationOptions,
     LLMServiceError,
     build_system_prompt,
     frame_untrusted_input,
-    generate_estimation,
+    generate_typed_estimation,
     new_untrusted_data_tag,
 )
 from app.services.llm_wrapper import LLMTruncatedResponseError, LLMWrapper
@@ -38,48 +34,29 @@ router = APIRouter(prefix="/api/v1", tags=["estimations"])
 
 
 @router.post("/estimate", response_model=EstimationResponse)
-def create_estimation(request: EstimationRequest) -> EstimationResponse:
-    """Receive a meeting transcription and return a software project estimation.
+def create_estimation(
+    request: EstimationRequest,
+    prompt_version: str = Query(
+        default="v1",
+        description="Version of the estimation prompt templates to use (e.g. v1, v2)",
+    ),
+) -> EstimationResponse:
+    """Receive a typed project description and return a software project estimation.
 
     Plain ``def``, not ``async def``: ``generate_estimation`` blocks on the LLM
     call, and FastAPI only runs blocking work off the event loop (in a
     threadpool) for sync handlers — an ``async def`` here would freeze every
     other request on this worker, including ``/health``, for the call's duration.
     """
-    opts = GenerationOptions(
-        preprocessing=request.preprocessing,
-        example_format=request.example_format,
-        num_examples=request.num_examples,
-        use_examples=request.use_examples,
-        model=request.model,
-        max_tokens=request.max_tokens,
-        thinking_budget=request.thinking_budget,
-    )
-
     try:
-        result = generate_estimation(request.transcription, opts)
+        result = generate_typed_estimation(request, version=prompt_version)
+    except PromptVersionNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LLMServiceError as exc:
         log.error("estimation_endpoint_error", error=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    validation = (
-        evaluate_estimation_structure(result["estimation"], result["finish_reason"])
-        if request.evaluate
-        else None
-    )
-
-    declared_total_cost = extract_declared_total_cost(result["estimation"])
-    annual_maintenance = (
-        round(declared_total_cost * 0.12, 2) if declared_total_cost is not None else None
-    )
-    if annual_maintenance is not None:
-        result["estimation"] = inject_annual_maintenance_line(
-            result["estimation"], annual_maintenance
-        )
-
-    return EstimationResponse(
-        **result, validation=validation, annual_maintenance=annual_maintenance
-    )
+    return EstimationResponse(text=result["estimation"], prompt_version=prompt_version)
 
 
 @router.post("/estimate/stream")

@@ -54,5 +54,39 @@ services:
       retries: 3
     restart: unless-stopped
 
+  streamlit:
+    build: .
+    container_name: estimator-streamlit
+    ports:
+      - "8501:8501"
+
+    env_file:
+      - .env
+
+    # Reach the estimator over the compose network, not localhost (the .env
+    # default is meant for running streamlit_app.py outside Docker).
+    environment:
+      ESTIMATOR_API_BASE_URL: http://estimator:8000
+
+    depends_on:
+      estimator:
+        condition: service_healthy
+
+    # Bind-mount the client script so edits are reflected without rebuilding,
+    # same hot-reload pattern used for the estimator's ./app mount above.
+    volumes:
+      - ./streamlit_app.py:/app/streamlit_app.py
+
+    command: streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port 8501
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
 volumes:
   redis_data:

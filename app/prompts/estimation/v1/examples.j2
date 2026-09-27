@@ -1,0 +1,106 @@
+### Example 1 — Mobile app
+
+**Project description:** A fintech startup needs a mobile app (iOS and Android) for
+peer-to-peer money transfers between friends. Users sign up with phone number
+verification, link a bank card, and send/request money with a note attached. Push
+notifications confirm each transfer. A transaction history screen shows the last 90
+days of activity.
+
+**Estimation:**
+
+## Project summary
+Cross-platform mobile app for peer-to-peer transfers, including onboarding,
+card linking, transfer flows, and push notifications.
+
+## Phases
+| Phase | Hours | Cost (EUR) |
+|-------|------:|------------|
+| Onboarding and phone verification | 24 | 1,500 |
+| Card linking (Stripe Issuing) | 20 | 1,250 |
+| Send/request money flow | 32 | 2,000 |
+| Push notifications | 12 | 750 |
+| Transaction history | 16 | 1,000 |
+| Testing and QA | 20 | 1,250 |
+
+## Totals
+- Total hours: 124
+- Total cost: 7,750 EUR
+- Recommended team: 1 senior mobile developer, 1 backend developer
+- Estimated duration: 6 weeks
+
+## Risks and assumptions
+- Assumes a single banking provider integration (no multi-bank support in this phase)
+- Push notification delivery depends on third-party services (APNs/FCM)
+- Regulatory/KYC requirements are out of scope for this estimation
+
+---
+
+### Example 2 — Internal tool
+
+**Project description:** A logistics company needs an internal tool for dispatchers
+to assign delivery routes to drivers. It must show a live map of driver locations,
+let dispatchers drag-and-drop deliveries onto routes, and send SMS notifications to
+drivers when a new route is assigned. Only company employees will use it, behind
+existing SSO.
+
+**Estimation:**
+
+## Project summary
+Internal dispatch tool with live map tracking, manual route assignment, and SMS
+notifications, integrated with the company's existing SSO.
+
+## Phases
+| Phase | Hours | Cost (EUR) |
+|-------|------:|------------|
+| SSO integration | 10 | 625 |
+| Live map with driver locations | 24 | 1,500 |
+| Drag-and-drop route assignment UI | 28 | 1,750 |
+| SMS notification integration | 10 | 625 |
+| Testing and QA | 14 | 875 |
+
+## Totals
+- Total hours: 86
+- Total cost: 5,375 EUR
+- Recommended team: 1 full-stack developer
+- Estimated duration: 4 weeks
+
+## Risks and assumptions
+- Assumes driver location data is already available via an existing mobile app
+- SMS costs are billed separately by the provider and not included in this estimate
+- No offline mode for dispatchers is considered
+
+---
+
+### Example 3 — Data pipeline
+
+**Project description:** An e-commerce company wants a data pipeline that ingests
+daily sales exports (CSV) from three regional stores, normalizes currencies and
+product codes, and loads the result into a shared analytics warehouse. The pipeline
+must run daily, alert the team on failures, and backfill historical data on demand.
+
+**Estimation:**
+
+## Project summary
+Scheduled ETL pipeline that ingests, normalizes, and loads multi-region sales data
+into a central analytics warehouse, with failure alerting and backfill support.
+
+## Phases
+| Phase | Hours | Cost (EUR) |
+|-------|------:|------------|
+| Ingestion connectors (CSV, 3 sources) | 18 | 1,125 |
+| Currency and product code normalization | 16 | 1,000 |
+| Warehouse loading and schema design | 20 | 1,250 |
+| Scheduling and failure alerting | 12 | 750 |
+| Backfill tooling | 10 | 625 |
+| Testing and QA | 14 | 875 |
+
+## Totals
+- Total hours: 90
+- Total cost: 5,625 EUR
+- Recommended team: 1 data engineer
+- Estimated duration: 5 weeks
+
+## Risks and assumptions
+- Assumes source CSV formats remain stable across the three stores
+- Currency conversion rates are provided by an existing internal service
+- Historical backfill volume is assumed to fit within a single batch run
