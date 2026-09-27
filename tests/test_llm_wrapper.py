@@ -5,7 +5,7 @@ import fakeredis
 import pytest
 
 from app.services.cache import EstimationCache
-from app.services.llm_wrapper import LLMWrapper, _estimate_cost
+from app.services.llm_wrapper import LLMTruncatedResponseError, LLMWrapper, _estimate_cost
 
 
 def _fake_completion(model: str, content: str = "the answer", input_tokens: int = 100, output_tokens: int = 50):
@@ -46,6 +46,71 @@ def test_estimate_cost_uses_pricing_table() -> None:
     assert cost == pytest.approx(0.75)
 
 
+def _router_keys_by_model(wrapper: LLMWrapper) -> dict[str, str | None]:
+    return {
+        deployment["litellm_params"]["model"]: deployment["litellm_params"].get("api_key")
+        for deployment in wrapper.router.model_list
+    }
+
+
+def test_router_wires_api_key_by_the_configured_models_actual_provider() -> None:
+    """PRIMARY_MODEL/FALLBACK_MODEL can be set to either provider in either slot;
+    the correct key must follow the model string, not the primary/fallback position.
+    """
+    cache = EstimationCache(fakeredis.FakeRedis(decode_responses=True), ttl=60)
+    wrapper = LLMWrapper(
+        openai_api_key="openai-key",
+        anthropic_api_key="anthropic-key",
+        primary_model="claude-haiku-4-5-20251001",  # swapped: primary is Anthropic here
+        fallback_model="gpt-4o-mini",  # and fallback is OpenAI
+        timeout=30,
+        num_retries=2,
+        cache=cache,
+    )
+    keys_by_model = _router_keys_by_model(wrapper)
+    assert keys_by_model["claude-haiku-4-5-20251001"] == "anthropic-key"
+    assert keys_by_model["gpt-4o-mini"] == "openai-key"
+
+
+def test_router_leaves_api_key_none_when_that_providers_key_is_missing() -> None:
+    cache = EstimationCache(fakeredis.FakeRedis(decode_responses=True), ttl=60)
+    wrapper = LLMWrapper(
+        openai_api_key=None,
+        anthropic_api_key="anthropic-key",
+        primary_model="gpt-4o-mini",
+        fallback_model="claude-haiku-4-5-20251001",
+        timeout=30,
+        num_retries=2,
+        cache=cache,
+    )
+    keys_by_model = _router_keys_by_model(wrapper)
+    assert keys_by_model["gpt-4o-mini"] is None
+    assert keys_by_model["claude-haiku-4-5-20251001"] == "anthropic-key"
+
+
+def test_complete_sends_examples_in_system_role_and_transcription_in_user_role(
+    wrapper: LLMWrapper,
+) -> None:
+    """Pins the data/instructions separation the CAG prompt relies on: whatever
+    the caller passes as system_prompt (the CAG examples) must reach the SDK as
+    the system message, and the raw transcription must reach it, unmodified, as
+    the user message \u2014 in that order.
+    """
+    fake = _fake_completion(model="gpt-4o-mini", content="ok")
+    with patch.object(wrapper.router, "completion", return_value=fake) as mocked:
+        wrapper.complete(
+            system_prompt="ROLE + CAG EXAMPLES BLOCK",
+            user_message="raw meeting transcription, verbatim",
+            model_override=None,
+            max_tokens=4000,
+            thinking_budget=None,
+        )
+    messages = mocked.call_args.kwargs["messages"]
+    assert [m["role"] for m in messages] == ["system", "user"]
+    assert messages[0]["content"] == "ROLE + CAG EXAMPLES BLOCK"
+    assert messages[1]["content"] == "raw meeting transcription, verbatim"
+
+
 def test_complete_returns_normalised_dict_and_caches(wrapper: LLMWrapper) -> None:
     fake = _fake_completion(model="gpt-4o-mini", content="hello world")
     with patch.object(wrapper.router, "completion", return_value=fake) as mocked:
@@ -78,6 +143,34 @@ def test_complete_returns_normalised_dict_and_caches(wrapper: LLMWrapper) -> Non
     assert mocked_again.call_count == 0
     assert cached["cache_hit"] is True
     assert cached["estimation"] == "hello world"
+
+
+def test_complete_raises_and_skips_cache_when_truncated(wrapper: LLMWrapper) -> None:
+    fake = _fake_completion(model="gpt-4o-mini", content="partial answer")
+    fake.choices[0].finish_reason = "length"
+
+    with patch.object(wrapper.router, "completion", return_value=fake) as mocked:
+        with pytest.raises(LLMTruncatedResponseError):
+            wrapper.complete(
+                system_prompt="sys",
+                user_message="usr",
+                model_override=None,
+                max_tokens=4000,
+                thinking_budget=None,
+            )
+    assert mocked.call_count == 1
+
+    # The truncated response must never be cached, so a retry hits the provider again.
+    with patch.object(wrapper.router, "completion", return_value=fake) as mocked_again:
+        with pytest.raises(LLMTruncatedResponseError):
+            wrapper.complete(
+                system_prompt="sys",
+                user_message="usr",
+                model_override=None,
+                max_tokens=4000,
+                thinking_budget=None,
+            )
+    assert mocked_again.call_count == 1
 
 
 def test_complete_with_model_override_bypasses_router(wrapper: LLMWrapper) -> None:
@@ -128,9 +221,15 @@ def test_thinking_budget_pads_max_tokens_when_anthropic_override(wrapper: LLMWra
 
 def test_complete_stream_yields_chunks_and_caches(wrapper: LLMWrapper) -> None:
     chunks = [
-        SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="Hello "))]),
-        SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="world"))]),
-        SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]),
+        SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content="Hello "), finish_reason=None)]
+        ),
+        SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content="world"), finish_reason=None)]
+        ),
+        SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content=None), finish_reason="stop")]
+        ),
     ]
     with patch.object(wrapper.router, "completion", return_value=iter(chunks)):
         emitted = list(
@@ -155,3 +254,38 @@ def test_complete_stream_yields_chunks_and_caches(wrapper: LLMWrapper) -> None:
         )
     assert router_call.call_count == 0
     assert "".join(replayed) == "Hello world"
+
+
+def test_complete_stream_raises_and_skips_cache_when_truncated(wrapper: LLMWrapper) -> None:
+    chunks = [
+        SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content="Hello "), finish_reason=None)]
+        ),
+        SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content=None), finish_reason="length")]
+        ),
+    ]
+    with patch.object(wrapper.router, "completion", return_value=iter(chunks)):
+        emitted: list[str] = []
+        with pytest.raises(LLMTruncatedResponseError):
+            for delta in wrapper.complete_stream(
+                system_prompt="sys",
+                user_message="usr",
+                model_override=None,
+                max_tokens=4000,
+            ):
+                emitted.append(delta)
+    # Tokens already yielded before the cut cannot be un-sent, but nothing gets cached.
+    assert emitted == ["Hello "]
+
+    with patch.object(wrapper.router, "completion", return_value=iter(chunks)) as mocked_again:
+        with pytest.raises(LLMTruncatedResponseError):
+            list(
+                wrapper.complete_stream(
+                    system_prompt="sys",
+                    user_message="usr",
+                    model_override=None,
+                    max_tokens=4000,
+                )
+            )
+    assert mocked_again.call_count == 1

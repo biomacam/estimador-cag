@@ -6,7 +6,7 @@ from functools import lru_cache
 
 from app.config import get_settings
 from app.services.cache import EstimationCache
-from app.services.llm_wrapper import LLMWrapper
+from app.services.llm_wrapper import LLMConfigurationError, LLMWrapper
 
 
 @lru_cache
@@ -18,6 +18,10 @@ def get_cache() -> EstimationCache:
 @lru_cache
 def get_llm_wrapper() -> LLMWrapper:
     settings = get_settings()
+    if not settings.is_llm_configured:
+        raise LLMConfigurationError(
+            "No LLM provider is configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY."
+        )
     return LLMWrapper(
         openai_api_key=settings.OPENAI_API_KEY,
         anthropic_api_key=settings.ANTHROPIC_API_KEY,

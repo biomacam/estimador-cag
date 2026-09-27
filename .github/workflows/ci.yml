@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Dummy value: Settings requires at least one key to be set, but tests
-      # mock every LLM call, so no real provider request is ever made.
+      # Dummy value: keeps is_llm_configured/llm_configured true-ish for tests that
+      # don't override Settings; every LLM call is mocked, so it's never actually used.
       OPENAI_API_KEY: "test-key-for-ci"
 
     steps:
@@ -25,11 +25,11 @@ jobs:
       with:
         python-version: "3.14"
 
+    - name: Instalar uv
+      uses: astral-sh/setup-uv@v6
+
     - name: Instalar dependencias
-      run: |
-        pip install -e .
-        pip install pytest fakeredis
+      run: uv sync --locked --all-groups
 
     - name: Ejecutar tests
-      run: |
-        pytest  
+      run: uv run pytest  

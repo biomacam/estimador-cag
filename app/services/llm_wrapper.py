@@ -26,8 +26,17 @@ import structlog
 from litellm import Router
 
 from app.services.cache import EstimationCache
+from app.services.evaluation import OK_FINISH_REASONS
 
 log = structlog.get_logger()
+
+
+class LLMTruncatedResponseError(Exception):
+    """Raised when the provider stopped before completing the response."""
+
+
+class LLMConfigurationError(Exception):
+    """Raised when no LLM provider API key is configured."""
 
 
 # Cost per 1M tokens (USD). Update as pricing changes.
@@ -82,13 +91,24 @@ class LLMWrapper:
         self.num_retries = num_retries
         self.cache = cache
 
+        for model, field_name in ((primary_model, "primary_model"), (fallback_model, "fallback_model")):
+            if self._api_key_for(model) is None:
+                log.warning(
+                    "llm_wrapper_missing_key_for_configured_model",
+                    field=field_name,
+                    model=model,
+                    provider=_provider_from_model(model),
+                )
+
         self.router = Router(
             model_list=[
                 {
                     "model_name": "estimator",
                     "litellm_params": {
                         "model": primary_model,
-                        "api_key": openai_api_key,
+                        # Keyed by what primary_model actually is, not by slot position,
+                        # so PRIMARY_MODEL/FALLBACK_MODEL can be set to either provider.
+                        "api_key": self._api_key_for(primary_model),
                         "timeout": timeout,
                     },
                 },
@@ -96,7 +116,7 @@ class LLMWrapper:
                     "model_name": "estimator",
                     "litellm_params": {
                         "model": fallback_model,
-                        "api_key": anthropic_api_key,
+                        "api_key": self._api_key_for(fallback_model),
                         "timeout": timeout,
                     },
                 },
@@ -104,6 +124,11 @@ class LLMWrapper:
             fallbacks=[{"estimator": ["estimator"]}],
             num_retries=num_retries,
         )
+
+    def _api_key_for(self, model: str) -> str | None:
+        """Resolve the key by what the model string actually is, matching ``_dispatch``'s
+        per-request override path instead of assuming primary=OpenAI, fallback=Anthropic."""
+        return self.anthropic_api_key if _provider_from_model(model) == "anthropic" else self.openai_api_key
 
     # ------------------------------------------------------------------
     # Public API
@@ -119,7 +144,8 @@ class LLMWrapper:
         thinking_budget: int | None = None,
     ) -> dict[str, Any]:
         """Single LLM call with cache + (optional) fallback. Returns the legacy dict shape
-        plus ``cache_hit`` and ``cost_usd`` fields.
+        plus ``cache_hit`` and ``cost_usd`` fields. Raises ``LLMTruncatedResponseError``
+        (without caching) if the provider stops before a full response.
         """
         cache_key_model = model_override or self.primary_model
         cache_key = EstimationCache.make_key(
@@ -165,6 +191,19 @@ class LLMWrapper:
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
         result = self._normalise_response(response, latency_ms=latency_ms)
+
+        if result["finish_reason"] not in OK_FINISH_REASONS:
+            log.error(
+                "llm_response_truncated",
+                model=result["model"],
+                provider=result["provider"],
+                finish_reason=result["finish_reason"],
+                latency_ms=latency_ms,
+            )
+            raise LLMTruncatedResponseError(
+                f"Provider stopped before completing the response (finish_reason={result['finish_reason']!r})"
+            )
+
         log.info(
             "llm_call_completed",
             model=result["model"],
@@ -189,9 +228,10 @@ class LLMWrapper:
         """Yield text chunks as they arrive from the model.
 
         Cache hits replay the cached estimation as a single chunk so the client UX
-        stays consistent. Cache misses stream live and the full text is cached
-        once the stream finishes (without ``cost_usd`` since LiteLLM does not
-        always report token usage for streaming calls).
+        stays consistent. Cache misses stream live; once the stream ends, a
+        non-``stop``/``end_turn`` finish reason raises ``LLMTruncatedResponseError``
+        instead of caching — only complete responses are ever cached (no ``cost_usd``
+        either way, since LiteLLM does not always report token usage for streaming calls).
         """
         cache_key_model = model_override or self.primary_model
         cache_key = EstimationCache.make_key(
@@ -225,6 +265,7 @@ class LLMWrapper:
         )
         t0 = time.perf_counter()
         full_text: list[str] = []
+        finish_reason: str | None = None
         try:
             response = self._dispatch(model_override=model_override, **kwargs)
             for chunk in response:
@@ -232,6 +273,9 @@ class LLMWrapper:
                 if delta:
                     full_text.append(delta)
                     yield delta
+                chunk_finish_reason = _extract_finish_reason(chunk)
+                if chunk_finish_reason:
+                    finish_reason = chunk_finish_reason
         except Exception as exc:
             latency_ms = int((time.perf_counter() - t0) * 1000)
             log.error(
@@ -244,6 +288,21 @@ class LLMWrapper:
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
         rendered = "".join(full_text)
+        normalised_finish_reason = finish_reason.lower() if finish_reason else None
+
+        if normalised_finish_reason not in OK_FINISH_REASONS:
+            # Tokens already reached the client — this only stops the cache from
+            # replaying an incomplete estimation on the next identical request.
+            log.error(
+                "llm_stream_truncated",
+                finish_reason=normalised_finish_reason,
+                latency_ms=latency_ms,
+                chars=len(rendered),
+            )
+            raise LLMTruncatedResponseError(
+                f"Provider stopped before completing the response (finish_reason={normalised_finish_reason!r})"
+            )
+
         log.info("llm_stream_completed", latency_ms=latency_ms, chars=len(rendered))
 
         self.cache.set(
@@ -252,7 +311,7 @@ class LLMWrapper:
                 "estimation": rendered,
                 "model": model_override or self.primary_model,
                 "provider": _provider_from_model(model_override or self.primary_model),
-                "finish_reason": "stop",
+                "finish_reason": normalised_finish_reason,
                 "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
                 "latency_ms": latency_ms,
                 "cost_usd": 0.0,
@@ -345,3 +404,11 @@ def _extract_delta(chunk: Any) -> str:
         return ""
     content = getattr(delta, "content", None)
     return content or ""
+
+
+def _extract_finish_reason(chunk: Any) -> str | None:
+    """Pull the finish reason out of a LiteLLM streaming chunk, if this one carries it."""
+    try:
+        return chunk.choices[0].finish_reason
+    except (AttributeError, IndexError):
+        return None

@@ -1,15 +1,33 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+import litellm
+from pydantic import AfterValidator, BaseModel, Field
 
 PreprocessingMode = Literal["none", "inline_cleaning", "two_phase"]
 ExampleFormat = Literal["markdown", "json", "narrative"]
+MAX_TRANSCRIPTION_TOKENS = 50_000
+
+
+def _validate_transcription_token_limit(transcription: str) -> str:
+    token_count = litellm.token_counter(model="gpt-4o-mini", text=transcription)
+    if token_count > MAX_TRANSCRIPTION_TOKENS:
+        raise ValueError(
+            f"Transcription must not exceed {MAX_TRANSCRIPTION_TOKENS:,} tokens"
+        )
+    return transcription
+
+
+TranscriptionText = Annotated[
+    str,
+    Field(min_length=50, description="Meeting transcription text (maximum 50,000 tokens)"),
+    AfterValidator(_validate_transcription_token_limit),
+]
 
 
 class EstimationRequest(BaseModel):
     """Incoming request containing a meeting transcription to estimate."""
 
-    transcription: str = Field(..., min_length=50, description="Meeting transcription text")
+    transcription: TranscriptionText
 
     preprocessing: PreprocessingMode = Field(
         default="none",
@@ -108,6 +126,6 @@ class EstimationResponse(BaseModel):
 class StreamEstimationRequest(BaseModel):
     """Streaming endpoint request � only the transcription, knobs are not exposed."""
 
-    transcription: str = Field(..., min_length=50, description="Meeting transcription text")
+    transcription: TranscriptionText
     model: str | None = Field(default=None, description="Override the default model")
     max_tokens: int = Field(default=4000, gt=0, le=16000)

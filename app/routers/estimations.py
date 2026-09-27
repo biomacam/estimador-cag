@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 import structlog
 #Depends implementa el sistema de inyección de dependencias de FastAPI.
 from fastapi import APIRouter, Depends, HTTPException
+from litellm.exceptions import APIError as LLMProviderAPIError
 from sse_starlette.sse import EventSourceResponse
 
 from app.dependencies import get_llm_wrapper
@@ -21,12 +22,15 @@ from app.services.evaluation import (
     inject_annual_maintenance_line,
 )
 from app.services.llm_service import (
+    LLM_PROVIDER_ERROR_MESSAGE,
     GenerationOptions,
     LLMServiceError,
     build_system_prompt,
+    frame_untrusted_input,
     generate_estimation,
+    new_untrusted_data_tag,
 )
-from app.services.llm_wrapper import LLMWrapper
+from app.services.llm_wrapper import LLMTruncatedResponseError, LLMWrapper
 
 log = structlog.get_logger()
 
@@ -34,8 +38,14 @@ router = APIRouter(prefix="/api/v1", tags=["estimations"])
 
 
 @router.post("/estimate", response_model=EstimationResponse)
-async def create_estimation(request: EstimationRequest) -> EstimationResponse:
-    """Receive a meeting transcription and return a software project estimation."""
+def create_estimation(request: EstimationRequest) -> EstimationResponse:
+    """Receive a meeting transcription and return a software project estimation.
+
+    Plain ``def``, not ``async def``: ``generate_estimation`` blocks on the LLM
+    call, and FastAPI only runs blocking work off the event loop (in a
+    threadpool) for sync handlers — an ``async def`` here would freeze every
+    other request on this worker, including ``/health``, for the call's duration.
+    """
     opts = GenerationOptions(
         preprocessing=request.preprocessing,
         example_format=request.example_format,
@@ -50,7 +60,7 @@ async def create_estimation(request: EstimationRequest) -> EstimationResponse:
         result = generate_estimation(request.transcription, opts)
     except LLMServiceError as exc:
         log.error("estimation_endpoint_error", error=str(exc))
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     validation = (
         evaluate_estimation_structure(result["estimation"], result["finish_reason"])
@@ -84,13 +94,14 @@ async def create_estimation_stream(
     benefit of streaming (intermediate phase 1 tokens would leak; validation
     only makes sense over the complete text).
     """
-    system_prompt = build_system_prompt()
+    untrusted_data_tag = new_untrusted_data_tag()
+    system_prompt = build_system_prompt(untrusted_data_tag=untrusted_data_tag)
 
     async def event_generator() -> AsyncIterator[dict]:
         loop = asyncio.get_running_loop()
         chunks = wrapper.complete_stream(
             system_prompt=system_prompt,
-            user_message=request.transcription,
+            user_message=frame_untrusted_input(request.transcription, untrusted_data_tag),
             model_override=request.model,
             max_tokens=request.max_tokens,
         )
@@ -124,7 +135,21 @@ async def create_estimation_stream(
                 }
 
             yield {"event": "done", "data": "[DONE]"}
-        except Exception as exc:  # noqa: BLE001
-            yield {"event": "error", "data": str(exc)}
+        except LLMTruncatedResponseError as exc:
+            log.error("estimate_stream_truncated", error=str(exc))
+            yield {"event": "error", "data": "The model stopped before completing the estimation."}
+        except LLMProviderAPIError as exc:
+            log.error(
+                "estimate_stream_provider_error", error=str(exc), error_type=type(exc).__name__
+            )
+            yield {"event": "error", "data": LLM_PROVIDER_ERROR_MESSAGE}
+        except Exception as exc:  # noqa: BLE001 — last-resort guard, never leak raw exception text
+            log.error(
+                "estimate_stream_unexpected_error", error=str(exc), error_type=type(exc).__name__
+            )
+            yield {
+                "event": "error",
+                "data": "An unexpected error occurred while generating the estimation.",
+            }
 
     return EventSourceResponse(event_generator())

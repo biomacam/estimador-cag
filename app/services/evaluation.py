@@ -2,7 +2,8 @@ import re
 
 from app.schemas.estimation import StructureCheck
 
-_OK_FINISH_REASONS = {"stop", "end_turn"}
+# Shared with app.services.llm_wrapper, which rejects/does not cache anything outside this set.
+OK_FINISH_REASONS = {"stop", "end_turn"}
 
 _TABLE_ROW_RE = re.compile(
     r"^\|\s*(?P<task>[^|]+?)\s*\|\s*(?P<hours>[\d.,]+)\s*\|\s*(?P<cost>[\d.,\sEURer]+)\s*\|\s*$",
@@ -98,7 +99,7 @@ def evaluate_estimation_structure(text: str, finish_reason: str) -> StructureChe
         cost_match = None
     
 
-    finish_reason_ok = finish_reason in _OK_FINISH_REASONS
+    finish_reason_ok = finish_reason in OK_FINISH_REASONS
 
     checks: list[bool] = [
         has_title,

@@ -18,11 +18,11 @@ description: 'Use when building, running, or troubleshooting the estimator servi
 1. Local run:
    ```bash
    cd estimator
-   cp .env.example .env   # set OPENAI_API_KEY / ANTHROPIC_API_KEY and LLM_PROVIDER
+   cp .env.example .env   # set OPENAI_API_KEY and/or ANTHROPIC_API_KEY
    docker compose up --build
    ```
    Service available at `http://localhost:8000` (docs at `/docs`).
-2. Required env vars come from `app/config.py`'s `Settings`: `LLM_PROVIDER` (`openai`|`anthropic`), matching `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, `LLM_MODEL`, `APP_ENV`, `LOG_LEVEL`. `get_settings()` is only called lazily from inside `services/llm_service.py` (never at import time in `main.py`), so a missing key for the selected provider does NOT crash the container at startup — it only fails `validate_api_key_for_provider` on the first `/api/v1/estimate` request. This is intentional: `/health` must stay reachable even when the LLM isn't configured yet, so an operator can tell "app is up, config is missing" apart from "app is crash-looping". Do not move `get_settings()`/`Settings()` construction to module import time or to `main.py` startup — that would reintroduce the crash-loop failure mode.
+2. Required env vars come from `app/config.py`'s `Settings`: at least one of `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` (validated lazily, see below), `PRIMARY_MODEL`/`FALLBACK_MODEL`, `APP_ENV`, `LOG_LEVEL`. `get_settings()`/`get_llm_wrapper()` are only evaluated lazily where the LLM is actually invoked (never at import time in `main.py`), so a missing key does NOT crash the container at startup — `/health` always returns 200 with `llm_configured: false`, and `/api/v1/estimate*` returns a 503 naming the missing variable on first use. This is intentional: `/health` must stay reachable even when the LLM isn't configured yet, so an operator can tell "app is up, config is missing" apart from "app is crash-looping". Do not move `get_settings()`/`Settings()` construction to module import time or to `main.py` startup — that would reintroduce the crash-loop failure mode.
 3. For production images: drop the `volumes` bind mount and the `--reload` flag override in `docker-compose.yml` (or use a separate `docker-compose.prod.yml`), keep the image's default `CMD`.
 4. To add a new runtime dependency, add it to `pyproject.toml` `dependencies` — the builder stage re-runs `uv sync` only when `pyproject.toml`/`uv.lock` change (Docker layer caching).
 5. Troubleshoot healthcheck failures with `docker compose logs estimator` and confirm `/health` returns `{"status": "ok"}` (see `app/main.py`).
