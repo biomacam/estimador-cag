@@ -1,0 +1,54 @@
+### Example A — E-commerce marketplace
+
+**Brief:** Two-sided marketplace for handmade crafts. Sellers create storefronts and
+list products; buyers browse, checkout via Stripe, and leave reviews. Sellers need a
+payout dashboard; admins need a moderation queue for flagged listings.
+
+**Estimate:**
+
+## Summary
+Two-sided marketplace: seller storefronts, buyer checkout, payouts, moderation.
+
+## Phases
+- Seller storefronts and product listings — 28h — 1,750 EUR
+- Buyer browsing, search, and checkout (Stripe Connect) — 32h — 2,000 EUR
+- Reviews and ratings — 12h — 750 EUR
+- Seller payout dashboard — 16h — 1,000 EUR
+- Admin moderation queue — 14h — 875 EUR
+- Testing and QA — 18h — 1,125 EUR
+
+## Totals
+- Hours: 120 — Cost: 7,500 EUR — Team: 2 full-stack developers — Duration: 6 weeks
+
+## Risks
+- Stripe Connect onboarding flow for sellers adds regulatory/KYC complexity not
+  scoped here.
+
+---
+
+### Example B — Telehealth patient intake portal
+
+**Brief:** Clinic wants a patient portal for pre-visit intake: forms, insurance
+card upload, symptom questionnaire, and secure messaging with the care team.
+Must integrate with their existing EHR via a REST API.
+
+**Estimate:**
+
+## Summary
+Patient intake portal with secure forms, document upload, and EHR integration.
+
+## Phases
+- Patient auth and secure session handling — 14h — 875 EUR
+- Intake forms and symptom questionnaire — 22h — 1,375 EUR
+- Insurance card upload and storage — 12h — 750 EUR
+- Secure messaging with care team — 18h — 1,125 EUR
+- EHR REST API integration — 24h — 1,500 EUR
+- Testing and QA (incl. HIPAA-aware review) — 20h — 1,250 EUR
+
+## Totals
+- Hours: 110 — Cost: 6,875 EUR — Team: 1 backend developer, 1 frontend developer —
+  Duration: 6 weeks
+
+## Risks
+- Assumes the EHR API already exposes the required intake endpoints; no EHR-side
+  changes are scoped.

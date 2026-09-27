@@ -76,23 +76,310 @@ Con el servicio corriendo, accede a la documentacion Swagger UI en:
 - **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
-## Problemas encontrados con el repo
+## Sesion 3 — LiteLLM, Redis cache, SSE y Streamlit
 
-- **Error en  tests**
-Al ejecutar los tests con uv run pytest desde la consola me daba el error de que en "from app.main import app" app no existía. Tuve que ejectar uv run "python -m pytest" para que leyera la estructura de directorios desde el directorio actual.
-Al final lo he solucionado añadiendo [tool.pytest.ini_options] al pyproject.toml con el parámetro pythonpath = ["."]. Ahora ya puedo ejecutar directamente "uv run pytest"
-- **Error al hacer import structlog** 
-En algunos ficheros obutve este error y tras pedirle a la IA que me lo solucionara me creó la carpeta src\estimador_cag con el fichero _init_.py que me solucionó el error.
-- **Error en la pipeline**
-Comento la siguiente linea en main.py porque la pipeline si no no pasa ya que no subo en el repo el fichero .env con el ApiKey de OpenAI. Después de consultar con la IA, parece un porblema de diseño porque el test health debe probar que fastapi funciona correctamente, no que la configuración de OPENAI sea correcta, o que el servicio de OPENAI esté funcionando correctamente.
-    #    "environment": settings.APP_ENV,
+A partir de la Sesion 3 el servicio incorpora una capa de wrapper sobre el LLM que anade:
 
-## Otros problemas que me he encontrado, y he superado!
+- **Fallback de proveedor** (LiteLLM Router) — si el modelo primario falla, se intenta el secundario
+- **Cache exact-match** en Redis — la misma transcripcion no vuelve a pagar tokens
+- **Streaming SSE** — endpoint `POST /api/v1/estimate/stream` que emite los tokens segun llegan
+- **UI Streamlit** — cliente real que consume el endpoint SSE
 
-- ** Docker ** He tendio problemas al hacer lel build de la imagen de docker, peor con la ayuda d ela IA he podido resolver los paths de configuración que me faltaban en el dockerfile
+### Arrancar la stack completa
 
-- ** Python ** Apenas conozco python y eso me ha impedido un poco modificar el código por miedo a que dejar todo de funcionar, algunos cambios que intenté hacer  me rompían la compilación.
+```bash
+cd estimator
+docker compose up --build
+# La API queda en http://localhost:8000 y Redis en redis://localhost:6379
+```
 
-## Sensaciones ##
-Aunque esto es un readme dejo este feedback sobre el ejercicio y en las siguientes ramas de próximas lecciones lo quitaré. Como primer ejercicio ha sido todfo un reto porque aparte de entender la arquitectura y el funcionamiento de la aplicación, el tema de la instalación del entorno de desarrollo con las dependencias me ha jugado alguna mala pasada (aún no sé porque he tenido que la carpeta src para evitar problemas con el import structlog). Soy nuevo en python, normalmente uso ADO, pero me he decidido por subir el repo a Github y además nunca había utilizado Docker porque en mi trabajo generalmente trabajamos con aplicaciones legacy de escritorio. Así que en cada paso me he ido encontrando con algún pequeño problema.
-Lo bueno es que he aprendido mucho y sé que para el próximo voy a tener que estructurarme mejor los días de dedicación, teniendo en cuenta que además he de estudiar el contenido de la próxima lección. He visto bastante salto cualitativo ente el ejercicio de la sesión 1 y el ejercicio de la sesión 2.
+### Probar el endpoint SSE
+
+Demo HTML: abrir [http://localhost:8000/static/sse_demo.html](http://localhost:8000/static/sse_demo.html).
+
+Desde CLI:
+```bash
+curl -N -X POST http://localhost:8000/api/v1/estimate/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}'
+```
+
+### Verificar la cache
+
+```bash
+# La misma peticion dos veces — la segunda devuelve cache_hit: true
+curl -s localhost:8000/api/v1/estimate -H 'Content-Type: application/json' \
+  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}' \
+  | jq '{cache_hit, cost_usd}'
+
+# Inspeccionar las claves en Redis
+docker compose exec redis redis-cli KEYS 'estimation:*'
+```
+
+### Streamlit
+
+**Opción A — dentro de Docker Compose** (mismo `docker compose up --build` de arriba, ya
+levanta un tercer servicio `streamlit` en `http://localhost:8501`, conectado al `estimator`
+por la red interna de Compose):
+
+```bash
+docker compose up --build
+# Abrir http://localhost:8501
+```
+
+**Opción B — fuera de Docker**, consumiendo el backend por HTTP:
+
+```bash
+cd estimator
+uv sync
+uv run streamlit run streamlit_app.py
+# Abrir http://localhost:8501
+```
+
+La URL del backend se lee de `ESTIMATOR_API_BASE_URL` (default `http://localhost:8000`; el
+servicio `streamlit` de Compose la sobrescribe a `http://estimator:8000`).
+
+---
+
+## Sesion 4 — Contrato tipado, prompts versionados en Jinja2 y frontera anti-inyección
+
+`POST /api/v1/estimate` ya no recibe una transcripción libre: acepta un `EstimationRequest`
+tipado (`description`, `project_type`, `detail_level`, `output_format`) y responde con
+`EstimationResponse` (`text`, `prompt_version`). El cliente Streamlit expone estos mismos
+campos mediante un `st.form`.
+
+Los prompts viven fuera del código Python, versionados por directorio:
+
+```
+app/prompts/
+├── loader.py                     # render_estimation_prompt(request, version="v1")
+└── estimation/
+    ├── v1/
+    │   ├── system.j2             # rol, formato/detalle condicionales, {% include examples.j2 %}
+    │   ├── user.j2                # bloque con la descripción del proyecto
+    │   └── examples.j2           # 2-3 ejemplos few-shot
+    └── v2/                       # variante deliberada: tono directo/ejecutivo + ejemplos propios
+        ├── system.j2
+        ├── user.j2
+        └── examples.j2
+```
+
+`render_estimation_prompt` devuelve `(system, user)` como dos mensajes separados
+(`role: "system"` / `role: "user"`) — nunca concatenados — y sigue despachándolos a través
+del mismo `LLMWrapper` de la Sesion 3 (cache, fallback y coste no cambian).
+
+**Frontera anti-inyección también en el flujo tipado.** `description` es texto externo, igual
+que la transcripción del flujo anterior, así que `render_estimation_prompt` nunca la interpola
+cruda: la envuelve con un tag aleatorio por petición (`app/services/security.py`,
+`frame_untrusted_input` / `new_untrusted_data_tag`, compartido con `llm_service.py` para evitar
+un import circular con el loader) y añade al `system.j2` una instrucción explícita de que ese
+bloque es dato, nunca instrucciones. Cubierto por
+[tests/test_prompt_injection_defense.py](tests/test_prompt_injection_defense.py).
+
+**Versionado real vía query param.** `POST /api/v1/estimate?prompt_version=v2` selecciona la
+variante `v2` (mismo contrato, mismas garantías de seguridad) sin tocar el resto del código; una
+versión desconocida devuelve `422` (`PromptVersionNotFoundError`). La respuesta siempre refleja
+la versión realmente usada en `prompt_version`.
+
+---
+
+## Arquitectura inicial
+
+El servicio sigue una **arquitectura por capas**: cada capa depende únicamente de la inmediatamente inferior, y toda petición atraviesa la misma secuencia HTTP → orquestación → infraestructura LLM → proveedor externo.
+
+```mermaid
+flowchart TD
+    Client["Cliente\n(Streamlit / demo SSE / curl)"]
+
+    subgraph API["Capa HTTP — app/main.py + app/routers/estimations.py"]
+        Health["GET /health"]
+        Estimate["POST /api/v1/estimate"]
+        Stream["POST /api/v1/estimate/stream (SSE)"]
+        ExcHandler["Exception handler:\nLLMConfigurationError → 503"]
+    end
+
+    subgraph Service["Capa de negocio — app/services/llm_service.py"]
+        Prompt["build_system_prompt()"]
+        Inject["frame_untrusted_input()\n(frontera anti-inyección)"]
+        Orchestrate["generate_estimation()\nextract_requirements()"]
+    end
+
+    Examples["app/context/examples.py\nCANONICAL_EXAMPLES (contexto CAG)"]
+
+    subgraph Wrapper["Capa de infraestructura LLM — app/services/llm_wrapper.py"]
+        LLMWrapperClass["LLMWrapper\n.complete() / .complete_stream()"]
+        Router["litellm.Router\n(primary + fallback)"]
+    end
+
+    subgraph CacheMod["app/services/cache.py"]
+        EstimationCache["EstimationCache\n(clave = prompt + knobs)"]
+    end
+
+    subgraph Config["Configuración — app/config.py + app/dependencies.py"]
+        Settings["Settings (.env)"]
+        Deps["get_llm_wrapper() / get_cache()"]
+    end
+
+    OpenAI(["OpenAI API"])
+    Anthropic(["Anthropic API"])
+    Redis[("Redis")]
+
+    Client --> Health
+    Client --> Estimate
+    Client --> Stream
+
+    Estimate --> Orchestrate
+    Stream --> LLMWrapperClass
+
+    Orchestrate --> Prompt
+    Orchestrate --> Inject
+    Orchestrate --> LLMWrapperClass
+    Prompt --> Examples
+
+    LLMWrapperClass --> Router
+    LLMWrapperClass --> EstimationCache
+    Router --> OpenAI
+    Router --> Anthropic
+    EstimationCache --> Redis
+
+    Deps --> LLMWrapperClass
+    Deps --> EstimationCache
+    Settings --> Deps
+    Settings --> ExcHandler
+```
+
+Notas sobre este diagrama:
+- El endpoint bloqueante (`/api/v1/estimate`) pasa por la capa de negocio completa (prompt, frontera anti-inyección, validación); el de streaming (`/api/v1/estimate/stream`) llama a `LLMWrapper` de forma más directa para poder emitir tokens según llegan.
+- `LLMWrapper` es la única pieza que conoce `litellm`; `llm_service.py` depende de esa clase concreta y no de una interfaz abstracta, por lo que **no** es una arquitectura hexagonal (puertos y adaptadores).
+- `EstimationCache` y `litellm.Router` son los dos únicos puntos que hablan con sistemas externos (Redis y los proveedores LLM, respectivamente).
+
+---
+
+## Arquitectura final
+
+Tras la Sesion 4, conviven **dos flujos** sobre la misma capa de infraestructura LLM: el
+endpoint tipado (`/api/v1/estimate`, prompts en Jinja2 versionados) y el de streaming
+(`/api/v1/estimate/stream`, que conserva el flujo CAG original basado en transcripción). Sigue
+siendo una **arquitectura por capas** — ningún flujo salta capas ni conoce `litellm` fuera de
+`LLMWrapper` — pero ahora la construcción del prompt está desacoplada en su propio módulo
+versionado, con una frontera anti-inyección compartida entre ambos flujos.
+
+```mermaid
+flowchart TD
+    Client["Cliente\n(Streamlit form / curl / demo SSE)"]
+
+    subgraph API["Capa HTTP — app/main.py + app/routers/estimations.py"]
+        Health["GET /health"]
+        Estimate["POST /api/v1/estimate?prompt_version=\nEstimationRequest → EstimationResponse"]
+        Stream["POST /api/v1/estimate/stream (SSE)\nStreamEstimationRequest (transcripción)"]
+        ExcHandler["Exception handlers:\nLLMConfigurationError → 503\nPromptVersionNotFoundError → 422\nLLMServiceError → 502"]
+    end
+
+    subgraph Typed["Flujo tipado — app/services/llm_service.py"]
+        GenTyped["generate_typed_estimation()"]
+    end
+
+    subgraph PromptsMod["app/prompts/"]
+        Loader["loader.py\nrender_estimation_prompt(request, version)"]
+        V1["estimation/v1/*.j2\nsystem + user + examples"]
+        V2["estimation/v2/*.j2\ntono directo, examples propios"]
+    end
+
+    subgraph SecurityMod["app/services/security.py (compartido)"]
+        Tag["new_untrusted_data_tag()"]
+        Frame["frame_untrusted_input()"]
+        Instr["untrusted_data_instructions()"]
+    end
+
+    subgraph Legacy["Flujo streaming (CAG) — app/services/llm_service.py"]
+        BuildPrompt["build_system_prompt()"]
+        Examples["app/context/examples.py\nCANONICAL_EXAMPLES"]
+    end
+
+    subgraph Wrapper["app/services/llm_wrapper.py"]
+        LLMWrapperClass["LLMWrapper\n.complete() / .complete_stream()"]
+        Router["litellm.Router\n(primary + fallback)"]
+    end
+
+    subgraph CacheMod["app/services/cache.py"]
+        EstimationCache["EstimationCache\n(clave = prompt + knobs)"]
+    end
+
+    subgraph Config["app/config.py + app/dependencies.py"]
+        Settings["Settings (.env)"]
+        Deps["get_llm_wrapper() / get_cache()"]
+    end
+
+    OpenAI(["OpenAI API"])
+    Anthropic(["Anthropic API"])
+    Redis[("Redis")]
+
+    Client --> Health
+    Client --> Estimate
+    Client --> Stream
+
+    Estimate --> GenTyped
+    GenTyped --> Loader
+    Loader --> V1
+    Loader --> V2
+    Loader --> Tag
+    Loader --> Frame
+    Loader --> Instr
+    GenTyped --> LLMWrapperClass
+
+    Stream --> BuildPrompt
+    BuildPrompt --> Examples
+    BuildPrompt --> Frame
+    Stream --> LLMWrapperClass
+
+    LLMWrapperClass --> Router
+    LLMWrapperClass --> EstimationCache
+    Router --> OpenAI
+    Router --> Anthropic
+    EstimationCache --> Redis
+
+    Deps --> LLMWrapperClass
+    Deps --> EstimationCache
+    Settings --> Deps
+    Settings --> ExcHandler
+```
+
+Qué cambió respecto a la arquitectura inicial:
+- **Construcción del prompt desacoplada y versionada**: el flujo tipado ya no arma el prompt con f-strings en `llm_service.py`; `app/prompts/loader.py` renderiza plantillas Jinja2 bajo `estimation/<version>/`, seleccionables vía `?prompt_version=` sin tocar código.
+- **Frontera anti-inyección compartida**: `app/services/security.py` (antes vivía dentro de `llm_service.py`) la usan ambos flujos — el tipado envuelve `description` y cada `reference_projects[i].{name,summary}`; el de streaming sigue envolviendo la transcripción.
+- **Dos flujos, una sola infraestructura LLM**: ambos terminan en el mismo `LLMWrapper` (cache Redis, fallback de proveedor, coste) — no hay una segunda implementación de llamada al LLM.
+- **Docker Compose pasa de 2 a 3 servicios**: `estimator` + `redis` + `streamlit` (antes Streamlit corría solo fuera de Docker).
+- Sigue **sin ser hexagonal**: `llm_service.py` y `loader.py` dependen de clases concretas (`LLMWrapper`, `Environment` de Jinja2), no de interfaces/puertos.
+
+---
+
+## Resumen rápido: arrancar y testear
+
+**Levantar la app (recomendado, Docker Compose):**
+
+```bash
+cp .env.example .env   # poner tu OPENAI_API_KEY y/o ANTHROPIC_API_KEY
+docker compose up --build
+```
+
+Levanta tres servicios: `estimator` (API, `http://localhost:8000`, docs en `/docs`),
+`redis` (`redis://localhost:6379`) y `streamlit` (`http://localhost:8501`).
+
+**Levantar la app en local sin Docker:**
+
+```bash
+uv sync
+uv run uvicorn app.main:app --reload   # API en http://localhost:8000
+uv run streamlit run streamlit_app.py  # cliente en http://localhost:8501 (otra terminal)
+```
+
+**Ejecutar los tests:**
+
+```bash
+uv run pytest
+```
+
+Toda la suite pasa en verde con este único comando (el mismo que ejecuta la CI en
+[.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+

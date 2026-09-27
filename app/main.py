@@ -1,11 +1,14 @@
 import structlog
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.routers import estimations
+from app.services.llm_wrapper import LLMConfigurationError
 
 
 def configure_logging() -> None:
@@ -53,27 +56,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 app.include_router(estimations.router)
 
 
+@app.exception_handler(LLMConfigurationError)
+async def llm_configuration_error_handler(
+    request: Request, exc: LLMConfigurationError
+) -> JSONResponse:
+    """Translate a missing API key into a 503, whether raised in a route body or
+    while resolving the ``get_llm_wrapper`` dependency (streaming endpoint)."""
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+# Serves the static SSE demo page from app/static/, if present.
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+if _STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
 @app.get("/health")
-async def health_check() -> dict:
-    """Return service health status."""
-    # settings = get_settings()
+async def health_check(settings: Settings = Depends(get_settings)) -> dict:
+    """Return service health status. Always 200 — never gated on LLM configuration,
+    since this is the endpoint operators use to tell "missing secret" from "broken code"."""
     return {
         "status": "healthy",
         "version": "0.1.0",
-    # comento la siguiente linea porque la pipeline si no no pasa ya que no subo en el repo
-    # el fichero .env con el ApiKey de OpenAI. Después de consultar con la IA, parece un porblema de diseño porque
-    # el test health debe probar que fastapi funciona correctamente, no que la configuración de OPENAI sea correcta,
-    # o que el servicio de OPENAI esté funcionando correctamente.
-    #    "environment": settings.APP_ENV,
+        "environment": settings.APP_ENV,
+        "llm_configured": settings.is_llm_configured,
     }
