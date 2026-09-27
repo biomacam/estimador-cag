@@ -131,3 +131,73 @@ La URL del backend se lee de `ESTIMATOR_API_BASE_URL` (default `http://localhost
 
 ---
 
+## Arquitectura inicial
+
+El servicio sigue una **arquitectura por capas**: cada capa depende únicamente de la inmediatamente inferior, y toda petición atraviesa la misma secuencia HTTP → orquestación → infraestructura LLM → proveedor externo.
+
+```mermaid
+flowchart TD
+    Client["Cliente\n(Streamlit / demo SSE / curl)"]
+
+    subgraph API["Capa HTTP — app/main.py + app/routers/estimations.py"]
+        Health["GET /health"]
+        Estimate["POST /api/v1/estimate"]
+        Stream["POST /api/v1/estimate/stream (SSE)"]
+        ExcHandler["Exception handler:\nLLMConfigurationError → 503"]
+    end
+
+    subgraph Service["Capa de negocio — app/services/llm_service.py"]
+        Prompt["build_system_prompt()"]
+        Inject["frame_untrusted_input()\n(frontera anti-inyección)"]
+        Orchestrate["generate_estimation()\nextract_requirements()"]
+    end
+
+    Examples["app/context/examples.py\nCANONICAL_EXAMPLES (contexto CAG)"]
+
+    subgraph Wrapper["Capa de infraestructura LLM — app/services/llm_wrapper.py"]
+        LLMWrapperClass["LLMWrapper\n.complete() / .complete_stream()"]
+        Router["litellm.Router\n(primary + fallback)"]
+    end
+
+    subgraph CacheMod["app/services/cache.py"]
+        EstimationCache["EstimationCache\n(clave = prompt + knobs)"]
+    end
+
+    subgraph Config["Configuración — app/config.py + app/dependencies.py"]
+        Settings["Settings (.env)"]
+        Deps["get_llm_wrapper() / get_cache()"]
+    end
+
+    OpenAI(["OpenAI API"])
+    Anthropic(["Anthropic API"])
+    Redis[("Redis")]
+
+    Client --> Health
+    Client --> Estimate
+    Client --> Stream
+
+    Estimate --> Orchestrate
+    Stream --> LLMWrapperClass
+
+    Orchestrate --> Prompt
+    Orchestrate --> Inject
+    Orchestrate --> LLMWrapperClass
+    Prompt --> Examples
+
+    LLMWrapperClass --> Router
+    LLMWrapperClass --> EstimationCache
+    Router --> OpenAI
+    Router --> Anthropic
+    EstimationCache --> Redis
+
+    Deps --> LLMWrapperClass
+    Deps --> EstimationCache
+    Settings --> Deps
+    Settings --> ExcHandler
+```
+
+Notas sobre este diagrama:
+- El endpoint bloqueante (`/api/v1/estimate`) pasa por la capa de negocio completa (prompt, frontera anti-inyección, validación); el de streaming (`/api/v1/estimate/stream`) llama a `LLMWrapper` de forma más directa para poder emitir tokens según llegan.
+- `LLMWrapper` es la única pieza que conoce `litellm`; `llm_service.py` depende de esa clase concreta y no de una interfaz abstracta, por lo que **no** es una arquitectura hexagonal (puertos y adaptadores).
+- `EstimationCache` y `litellm.Router` son los dos únicos puntos que hablan con sistemas externos (Redis y los proveedores LLM, respectivamente).
+
