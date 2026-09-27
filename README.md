@@ -379,9 +379,7 @@ uv run streamlit run streamlit_app.py  # cliente en http://localhost:8501 (otra 
 uv run pytest
 ```
 
-Nota: `tests/test_estimate_endpoint.py` sigue el contrato previo a la Sesion 4
-(`transcription` en lugar de `description`/`project_type`/...) y falla con el endpoint
-tipado actual; el resto de la suite (schemas, prompts, seguridad, cache, wrapper, streaming)
-pasa en verde.
+Toda la suite pasa en verde con este único comando (el mismo que ejecuta la CI en
+[.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 
