@@ -39,7 +39,7 @@ def render_estimation_prompt(
 
     ``request.description`` and each ``reference_projects[i].{name,summary}`` are
     untrusted external input, so none of them reach the templates as a raw string:
-    they're all wrapped in the *same* per-request random ``<user-data-{tag}>``
+    they're all wrapped in the *same* fixed ``<user-data-{tag}>``
     delimiter (same boundary used by the transcription-based flow in
     ``llm_service.py``) and the system prompt is told to treat any such block as
     data, never as instructions, wherever it appears.

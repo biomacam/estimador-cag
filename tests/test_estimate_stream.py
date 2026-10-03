@@ -57,7 +57,7 @@ def test_stream_endpoint_emits_token_and_done_events() -> None:
         assert len(stub.calls) == 1
         framed_user_message = stub.calls[0]["user_message"]
         assert unwrap_untrusted_input(framed_user_message) == "x" * 60
-        # The system prompt must reference the same random tag the user message is
+        # The system prompt must reference the same tag the user message is
         # wrapped in, otherwise the model has no way to know where the data starts.
         tag = framed_user_message.split("<user-data-", 1)[1].split(">", 1)[0]
         assert f"<user-data-{tag}>" in stub.calls[0]["system_prompt"]

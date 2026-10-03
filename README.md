@@ -127,17 +127,30 @@ docker compose up --build
 # Abrir http://localhost:8501
 ```
 
-**Opción B — fuera de Docker**, consumiendo el backend por HTTP:
+**Opción B — ejecutar la API y Streamlit fuera de Docker**, usando Docker solo para Redis:
+
+En `.env`, configura `REDIS_URL=redis://localhost:6379` (es el valor local por defecto;
+Compose lo sobrescribe internamente con `redis://redis:6379`). Inicia Redis:
 
 ```bash
-cd estimator
-uv sync
-uv run streamlit run streamlit_app.py
-# Abrir http://localhost:8501
+docker compose up -d redis
 ```
 
-La URL del backend se lee de `ESTIMATOR_API_BASE_URL` (default `http://localhost:8000`; el
-servicio `streamlit` de Compose la sobrescribe a `http://estimator:8000`).
+En una terminal, inicia FastAPI:
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+En otra terminal, inicia Streamlit:
+
+```bash
+uv run streamlit run streamlit_app.py
+```
+
+Abre `http://localhost:8501`. Streamlit llama a FastAPI en `http://localhost:8000`,
+configurado por `ESTIMATOR_API_BASE_URL`. Si Redis ya está instalado localmente, no hace
+falta arrancar el servicio Redis de Compose.
 
 ---
 

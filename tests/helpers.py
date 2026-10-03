@@ -1,11 +1,11 @@
 """Shared test helpers for asserting the untrusted-data delimiter contract
 (see app.services.llm_service.frame_untrusted_input) without hardcoding the
-per-request random tag anywhere in the test suite.
+tag in assertions about the wrapped text.
 """
 
 import re
 
-_FRAMED_RE = re.compile(r"^<user-data-([0-9a-f]+)>\n(.*)\n</user-data-\1>$", re.DOTALL)
+_FRAMED_RE = re.compile(r"^<user-data-([a-z0-9]+)>\n(.*)\n</user-data-\1>$", re.DOTALL)
 
 
 def unwrap_untrusted_input(framed: str) -> str:

@@ -33,9 +33,6 @@ def test_user_prompt_contains_the_literal_description() -> None:
     description = "Build a booking system for a yoga studio with class scheduling and payments."
     _, user = render_estimation_prompt(_request(description=description))
 
-    # The random <user-data-{tag}> wrapper (see app/services/security.py) replaces the
-    # earlier fixed <project_description> tag as the anti-injection boundary, but the
-    # literal description text must still reach the user message unmodified.
     assert description in user
 
 
