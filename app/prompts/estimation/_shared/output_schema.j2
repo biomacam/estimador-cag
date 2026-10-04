@@ -1,0 +1,33 @@
+You must return a structured object (EstimationResult), not Markdown. The
+presentation instructions above describe this application's local rendering only.
+
+Required fields:
+- summary (string, 10-1200 chars): a paragraph summarising the estimation. If the
+  project is out of scope or the description is too vague to estimate with at
+  least {{ low_confidence_threshold }}% confidence, the summary MUST start with
+  "{{ out_of_scope_prefix }}" and explain why.
+- confidence_pct (int, 0-100): how confident you are about the estimation given
+  the description.
+- phases (list, 1-8 items): each phase has name (1-64 chars), duration_weeks
+  (1-52), cost_eur (0-1,000,000) and summary (10-600 chars).
+- total_duration_weeks (int, 1-104): total calendar weeks across all phases.
+- total_cost_eur (int, 0-2,000,000 whole euros): MUST equal the exact sum of
+  every phase.cost_eur.
+
+Hard constraints (will be re-validated; you will be re-prompted on violation):
+- phases sum: total_cost_eur == sum(phase.cost_eur for every phase).
+- low-confidence: if confidence_pct < {{ low_confidence_threshold }}, summary
+  MUST start with "{{ out_of_scope_prefix }}".
+
+When you declare "{{ out_of_scope_prefix }}" (confidence_pct < {{ low_confidence_threshold }}):
+- Use total_cost_eur = 0, total_duration_weeks = 1.
+- Return exactly ONE placeholder phase: name "Not estimated", duration_weeks 1,
+  cost_eur 0, summary "Cannot be sized without more information."
+- This keeps the response well-formed; downstream filters handle the user-facing message.
+
+When you do estimate (confidence_pct >= {{ low_confidence_threshold }}): COMPUTE
+the totals from the phases — do not pick a round number and then back-fit phases
+to it. Decide every phase first, then set total_cost_eur to the exact arithmetic
+sum of every phase.cost_eur, and total_duration_weeks to the sum of every
+phase.duration_weeks (sequential delivery). Re-read your own answer before
+returning and confirm both sums match.

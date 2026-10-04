@@ -8,15 +8,24 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from instructor.core import InstructorRetryException
 import structlog
 from litellm.exceptions import APIError as LLMProviderAPIError
+from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from app.cache.semantic import EstimationSemanticCache
 
 from app.context.examples import format_examples_for_prompt, select_examples
 from app.dependencies import get_llm_wrapper
+from app.guardrails.input import check_input
+from app.guardrails.output import enforce_scope_response
 from app.prompts.loader import render_estimation_prompt
-from app.schemas.estimation import EstimationRequest, ExampleFormat, PreprocessingMode
+from app.schemas.estimation import (
+    EstimationRequest, EstimationResponse, EstimationResult, ExampleFormat, OutputFormat, PreprocessingMode,
+)
 from app.services.evaluation import OK_FINISH_REASONS
 from app.services.llm_wrapper import LLMTruncatedResponseError
 from app.services.security import (
@@ -237,14 +246,52 @@ def extract_requirements(
 # ---------------------------------------------------------------------------
 
 
-def generate_typed_estimation(request: EstimationRequest, version: str = "v1") -> dict[str, Any]:
-    """Generate an estimation from a typed request using the versioned prompt templates.
+def _invoke_structured_llm(
+    *, system_prompt: str, user_message: str,
+) -> tuple[EstimationResult, dict[str, Any]]:
+    return get_llm_wrapper().complete_structured(
+        system_prompt=system_prompt,
+        user_message=user_message,
+        response_model=EstimationResult,
+        max_tokens=DEFAULT_MAX_TOKENS,
+    )
 
-    Unlike ``generate_estimation``, the system/user messages come from
-    ``render_estimation_prompt`` (Jinja2 templates under ``app/prompts/``) rather
-    than ``build_system_prompt``/CAG example injection — the two messages are
-    still sent separately to the wrapper, never concatenated.
-    """
+
+def render_structured_estimation(result: EstimationResult, output_format: OutputFormat) -> str:
+    """Render validated data locally for clients that still display Markdown."""
+    def inline(text: str) -> str:
+        return " ".join(text.split()).replace("|", "\\|")
+
+    lines = ["## Project summary", result.summary, "", "## Phases"]
+    if output_format == OutputFormat.PHASES_TABLE:
+        lines.extend(["| Phase | Weeks | Cost (EUR) | Summary |", "| --- | ---: | ---: | --- |"])
+        lines.extend(
+            f"| {inline(phase.name)} | {phase.duration_weeks} | {phase.cost_eur:,} | {inline(phase.summary)} |"
+            for phase in result.phases
+        )
+    elif output_format == OutputFormat.LINE_ITEMS:
+        lines.extend(
+            f"- {inline(phase.name)}: {phase.duration_weeks} weeks, {phase.cost_eur:,} EUR. {inline(phase.summary)}"
+            for phase in result.phases
+        )
+    else:
+        lines.extend(
+            f"{phase.name}: {phase.summary} Duration: {phase.duration_weeks} weeks. Cost: {phase.cost_eur:,} EUR.\n"
+            for phase in result.phases
+        )
+    lines.extend([
+        "", "## Totals",
+        f"- Total cost: {result.total_cost_eur:,} EUR",
+        f"- Estimated duration: {result.total_duration_weeks} weeks",
+        f"- Confidence: {result.confidence_pct}%",
+    ])
+    return "\n".join(lines)
+
+
+def generate_typed_estimation(request: EstimationRequest, version: str = "v1") -> dict[str, Any]:
+    """Generate validated structured data and render compatibility text locally."""
+    # The structured-output contract and out-of-scope instructions live in
+    # app/prompts/estimation/_shared/output_schema.j2, included by every version.
     system_prompt, user_message = render_estimation_prompt(request, version=version)
 
     log.info(
@@ -256,13 +303,15 @@ def generate_typed_estimation(request: EstimationRequest, version: str = "v1") -
     )
 
     try:
-        result = _invoke_llm(
+        result, meta = _invoke_structured_llm(
             system_prompt=system_prompt,
             user_message=user_message,
-            model_override=None,
-            max_tokens=DEFAULT_MAX_TOKENS,
-            thinking_budget=None,
         )
+        result = EstimationResult.model_validate(result.model_dump())
+        # Third layer of scope robustness: normalises the rare edge case where
+        # the prompt instructions and the schema validator both allowed a
+        # low-confidence answer through without the "Out of scope:" prefix.
+        result = enforce_scope_response(result)
     except LLMProviderAPIError as exc:
         log.error(
             "typed_estimation_llm_call_failed", error=str(exc), error_type=type(exc).__name__
@@ -271,13 +320,60 @@ def generate_typed_estimation(request: EstimationRequest, version: str = "v1") -
     except LLMTruncatedResponseError as exc:
         log.error("typed_estimation_llm_call_truncated", error=str(exc))
         raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE) from exc
+    except (InstructorRetryException, ValidationError) as exc:
+        log.error("typed_estimation_validation_failed", error_type=type(exc).__name__)
+        raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE) from exc
 
-    return result
+    return {
+        "estimation": render_structured_estimation(result, request.output_format),
+        "result": result,
+        "cache_hit": meta.get("cache_hit", False),
+    }
 
 
 # ---------------------------------------------------------------------------
 # Main entrypoint
 # ---------------------------------------------------------------------------
+
+
+class EstimationService:
+    """HTTP-independent entry point for the typed estimation pipeline."""
+
+    def __init__(
+        self,
+        *,
+        openai_client: Any | None = None,
+        semantic_cache: "EstimationSemanticCache | None" = None,
+    ) -> None:
+        self.openai_client = openai_client
+        self.semantic_cache = semantic_cache
+
+    def estimate(self, request: EstimationRequest, version: str = "v1") -> EstimationResponse:
+        # Input guardrails run before any cache lookup or LLM call — a rejected
+        # description must never be served from cache nor reach the provider.
+        check_input(request.description, openai_client=self.openai_client)
+
+        if self.semantic_cache is not None:
+            semantic_hit = self.semantic_cache.lookup(request, version)
+            if semantic_hit is not None:
+                log.info("estimation_cache_hit", kind="semantic")
+                return EstimationResponse(
+                    text=render_structured_estimation(semantic_hit, request.output_format),
+                    prompt_version=version,
+                    result=semantic_hit,
+                    cached=True,
+                )
+
+        generated = generate_typed_estimation(request, version=version)
+        if self.semantic_cache is not None and not generated["cache_hit"]:
+            self.semantic_cache.store(request, generated["result"], version)
+
+        return EstimationResponse(
+            text=generated["estimation"],
+            prompt_version=version,
+            result=generated["result"],
+            cached=generated["cache_hit"],
+        )
 
 
 def generate_estimation(

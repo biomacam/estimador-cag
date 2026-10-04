@@ -4,6 +4,8 @@ produces, never call an LLM. Must stay fast — no network, no provider mocking 
 
 from app.prompts.loader import render_estimation_prompt
 from app.schemas.estimation import (
+    LOW_CONFIDENCE_THRESHOLD,
+    OUT_OF_SCOPE_PREFIX,
     DetailLevel,
     EstimationRequest,
     OutputFormat,
@@ -34,6 +36,16 @@ def test_user_prompt_contains_the_literal_description() -> None:
     _, user = render_estimation_prompt(_request(description=description))
 
     assert description in user
+
+
+def test_system_prompt_states_the_real_out_of_scope_threshold_and_prefix() -> None:
+    """The prompt must reflect the actual values EstimationResult enforces, not a
+    hardcoded copy that could drift from the validators."""
+    system, _ = render_estimation_prompt(_request())
+
+    assert f'"{OUT_OF_SCOPE_PREFIX}"' in system
+    assert f"confidence_pct < {LOW_CONFIDENCE_THRESHOLD}" in system
+    assert "placeholder phase" in system
 
 
 def test_system_prompt_output_format_instruction_matches_only_the_selected_format() -> None:

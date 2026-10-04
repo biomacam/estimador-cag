@@ -11,7 +11,11 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
-from app.schemas.estimation import EstimationRequest
+from app.schemas.estimation import (
+    OUT_OF_SCOPE_PREFIX,
+    LOW_CONFIDENCE_THRESHOLD,
+    EstimationRequest,
+)
 from app.services.security import (
     frame_untrusted_input,
     new_untrusted_data_tag,
@@ -67,6 +71,10 @@ def render_estimation_prompt(
         "detail_level": request.detail_level.value,
         "output_format": request.output_format.value,
         "reference_projects": framed_reference_projects,
+        # Sourced from the schema so the prompt can never drift from what the
+        # EstimationResult model_validators actually enforce.
+        "low_confidence_threshold": LOW_CONFIDENCE_THRESHOLD,
+        "out_of_scope_prefix": OUT_OF_SCOPE_PREFIX,
     }
     try:
         system = _env.get_template(f"estimation/{version}/system.j2").render(context)

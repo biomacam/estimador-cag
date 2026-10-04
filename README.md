@@ -158,7 +158,7 @@ falta arrancar el servicio Redis de Compose.
 
 `POST /api/v1/estimate` ya no recibe una transcripción libre: acepta un `EstimationRequest`
 tipado (`description`, `project_type`, `detail_level`, `output_format`) y responde con
-`EstimationResponse` (`text`, `prompt_version`). El cliente Streamlit expone estos mismos
+`EstimationResponse` (`result`, `text`, `prompt_version`, `cached`). El cliente Streamlit expone estos mismos
 campos mediante un `st.form`.
 
 Los prompts viven fuera del código Python, versionados por directorio:
@@ -178,16 +178,70 @@ app/prompts/
 ```
 
 `render_estimation_prompt` devuelve `(system, user)` como dos mensajes separados
-(`role: "system"` / `role: "user"`) — nunca concatenados — y sigue despachándolos a través
-del mismo `LLMWrapper` de la Sesion 3 (cache, fallback y coste no cambian).
+(`role: "system"` / `role: "user"`) — nunca concatenados. El servicio añade instrucciones
+de salida estructurada y llama a `LLMWrapper.complete_structured()` con
+`response_model=EstimationResult`.
+
+**Instructor + LiteLLM.** Instructor envuelve `litellm.completion`: usa `Mode.JSON_SCHEMA`
+para OpenAI y `Mode.TOOLS` para Anthropic. El esquema exige `summary`, `confidence_pct`,
+`phases`, `total_duration_weeks` y `total_cost_eur`. Cada `Phase` contiene `name`,
+`duration_weeks`, `cost_eur` y `summary`. Los validadores Pydantic exigen la suma exacta
+de costes y el prefijo `Out of scope:` si la confianza es inferior al 30 %.
+Instructor recibe `max_retries=6` (un intento inicial y hasta seis reintentos).
+Si no consigue una respuesta válida, el endpoint devuelve `502` con un mensaje genérico.
+
+El flujo estructurado usa directamente el modelo primario, sin fallback automático.
+Su caché Redis está separada de la de texto e incluye el esquema, el modo de Instructor,
+los prompts, el modelo y el límite de tokens. Solo guarda resultados validados y vuelve
+a validarlos al leerlos. `cached` indica si se reutilizó una respuesta.
+`text` se genera localmente a partir del resultado validado, respetando `output_format`,
+para mantener Streamlit compatible. El streaming y el flujo antiguo siguen siendo de texto.
+
+**Robustez de scope, en tres capas.** 1) El prompt (`output_schema.j2`) pide
+explícitamente declarar `Out of scope:` si `confidence_pct` cae por debajo del
+umbral. 2) El `@model_validator` en `EstimationResult` lo exige, forzando a
+Instructor a reintentar. 3) `app/guardrails/output.py::enforce_scope_response()`
+es la última red: tras validar el resultado, reescribe el caso límite (una
+confianza baja sin el prefijo, solo alcanzable si algo muta el objeto tras su
+construcción) en una `EstimationResult` de marcador de posición, sin lanzar
+nunca una excepción.
+
+**Endpoint y dependencias.** El router recibe `EstimationService` mediante
+`Depends(get_estimation_service)` y delega en `service.estimate(request, version=prompt_version)`.
+El servicio construye `EstimationResponse`; el router solo traduce errores a HTTP:
+`422` para versiones desconocidas o datos invalidos, `502` para fallos de generacion o
+validacion y `503` si faltan credenciales. Los errores `502` no exponen detalles internos.
+El contrato completo se publica en `/docs` y `/openapi.json`, incluyendo `Phase` y
+`EstimationResult`. La fabrica del servicio no resuelve credenciales al arrancar:
+el wrapper y Redis siguen usando las fabricas compartidas y se resuelven al estimar.
+Las pruebas pueden sustituir el servicio mediante `app.dependency_overrides`.
+Pydantic 2.x, Instructor y LiteLLM son dependencias directas del proyecto.
+
+**Guardrails de entrada.** `EstimationService.estimate()` llama a
+`app/guardrails/input.py::check_input()` antes de cualquier caché o llamada al LLM, con
+tres capas que se detienen en la primera infracción: moderación (OpenAI Moderation API,
+se omite sin `OPENAI_API_KEY` y falla abierto si la API no responde), deteccion de
+prompt injection (patrones regex) y deteccion de PII (correo, IBAN, telefono). Una
+infraccion lanza `InputGuardrailViolation`, que el router traduce a `400` con
+`{"reason", "message"}`. El cliente OpenAI usado para moderar se resuelve de forma
+perezosa en `get_openai_client()` (`app/dependencies.py`), igual que el resto de
+credenciales.
+
+Las dependencias utilizan Instructor 1.x y OpenAI SDK 2.x por compatibilidad. Tras este
+cambio de dependencias, Docker requiere reconstruir las imágenes desde este directorio:
+
+```powershell
+docker compose up -d --build estimator streamlit
+```
 
 **Frontera anti-inyección también en el flujo tipado.** `description` es texto externo, igual
 que la transcripción del flujo anterior, así que `render_estimation_prompt` nunca la interpola
-cruda: la envuelve con un tag aleatorio por petición (`app/services/security.py`,
+cruda: la envuelve con un tag fijo (`app/services/security.py`,
 `frame_untrusted_input` / `new_untrusted_data_tag`, compartido con `llm_service.py` para evitar
 un import circular con el loader) y añade al `system.j2` una instrucción explícita de que ese
 bloque es dato, nunca instrucciones. Cubierto por
 [tests/test_prompt_injection_defense.py](tests/test_prompt_injection_defense.py).
+El tag fijo mantiene la caché estable, pero es predecible y no impide cierres falsificados.
 
 **Versionado real vía query param.** `POST /api/v1/estimate?prompt_version=v2` selecciona la
 variante `v2` (mismo contrato, mismas garantías de seguridad) sin tocar el resto del código; una
@@ -394,5 +448,137 @@ uv run pytest
 
 Toda la suite pasa en verde con este único comando (el mismo que ejecuta la CI en
 [.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+---
+
+## Arquitectura de la aplicación
+
+```mermaid
+flowchart TD
+    Client["Cliente Streamlit\nbadge Generating + contador\nbadges PROMPT vX / CACHED\nbotón Nueva estimación"]
+
+    subgraph API["Capa HTTP — app/routers/estimations.py"]
+        Estimate["POST /api/v1/estimate?prompt_version="]
+        ExcHandler["400 InputGuardrailViolation\n422 PromptVersionNotFoundError\n502 LLMServiceError\n503 LLMConfigurationError"]
+    end
+
+    subgraph ServiceL["app/services/llm_service.py::EstimationService"]
+        CheckInput["1. check_input()"]
+        SemLookup["2. semantic_cache.lookup()"]
+        GenTyped["3. generate_typed_estimation()"]
+        SemStore["4. semantic_cache.store()\n(si no vino de caché)"]
+    end
+
+    subgraph InputG["app/guardrails/input.py"]
+        Moderation["Moderación OpenAI"]
+        Injection["Prompt injection (regex)"]
+        PII["PII: email / IBAN / teléfono"]
+    end
+
+    subgraph PromptsMod["app/prompts/"]
+        Loader["loader.py\nrender_estimation_prompt(request, version)"]
+        Shared["_shared/output_schema.j2\nLOW_CONFIDENCE_THRESHOLD, OUT_OF_SCOPE_PREFIX"]
+        V1["v1 / v2\nsystem + user + examples"]
+    end
+
+    subgraph Wrapper["app/services/llm_wrapper.py::LLMWrapper"]
+        Structured["complete_structured()\nInstructor Mode.JSON_SCHEMA / Mode.TOOLS"]
+        ExactCache["caché exacta (hash prompt+modelo)"]
+    end
+
+    subgraph OutputG["app/guardrails/output.py"]
+        Enforce["enforce_scope_response()\nfiltro de último recurso"]
+    end
+
+    subgraph Render["EstimationResult validado"]
+        RenderText["render_structured_estimation()\nMarkdown local (text)"]
+    end
+
+    subgraph SemCache["app/cache/semantic.py::EstimationSemanticCache"]
+        Bucket["bucket_for()\nprompt_version:project_type:detail_level:output_format"]
+        Vector["embedding + similitud coseno\n(threshold configurable)"]
+    end
+
+    subgraph Deps["app/dependencies.py"]
+        GetOpenAI["get_openai_client()"]
+        GetSemantic["get_semantic_cache()"]
+        GetWrapper["get_llm_wrapper()"]
+    end
+
+    OpenAI(["OpenAI API\nmoderación + embeddings + completions"])
+    Anthropic(["Anthropic API"])
+    RedisStack[("Redis Stack\nRediSearch")]
+
+    Client --> Estimate
+    Estimate --> CheckInput
+    CheckInput --> Moderation --> Injection --> PII
+    CheckInput -. infracción .-> ExcHandler
+
+    CheckInput --> SemLookup
+    SemLookup --> Bucket
+    SemLookup --> Vector
+    SemLookup -. hit .-> Client
+
+    SemLookup --> GenTyped
+    GenTyped --> Loader --> Shared
+    Loader --> V1
+    GenTyped --> Structured
+    Structured --> ExactCache
+    Structured --> Enforce
+    Enforce --> RenderText
+    RenderText --> SemStore
+    SemStore --> Vector
+
+    GetOpenAI --> Moderation
+    GetOpenAI --> Vector
+    GetSemantic --> SemLookup
+    GetWrapper --> Structured
+
+    Structured --> OpenAI
+    Structured --> Anthropic
+    Moderation --> OpenAI
+    ExactCache --> RedisStack
+    Vector --> RedisStack
+
+    SemStore --> Client
+```
+
+### Qué se incorporó en esta sesión
+
+- **Datos estructurados y validación (`app/schemas/estimation.py`)**: nuevos modelos
+  `Phase` y `EstimationResult`, con dos `@model_validator`: la suma de costes de las
+  fases debe coincidir exactamente con `total_cost_eur`, y toda respuesta con
+  `confidence_pct < 30` debe empezar por `"Out of scope:"`.
+- **Instructor + LiteLLM (`app/services/llm_wrapper.py::complete_structured()`)**:
+  genera y valida el JSON estructurado, seleccionando `Mode.JSON_SCHEMA` para OpenAI
+  y `Mode.TOOLS` para Anthropic, con hasta 6 reintentos automáticos ante violaciones
+  del esquema. Requirió fijar `openai>=2,<3` e `instructor>=1.16,<2` por
+  incompatibilidad de versiones.
+- **Endpoint y dependencias**: `EstimationService` se inyecta vía
+  `Depends(get_estimation_service)`; el router solo traduce errores a HTTP
+  (`400/422/502/503`), sin lógica de negocio ni fugas de detalles internos.
+- **Robustez de scope en tres capas**: instrucciones explícitas en
+  `app/prompts/estimation/_shared/output_schema.j2` (compartidas por `v1` y `v2`,
+  parametrizadas con las constantes reales del esquema para que nunca diverjan del
+  validador) + el `@model_validator` + `app/guardrails/output.py::enforce_scope_response()`
+  como red de seguridad final que nunca lanza excepción.
+- **Guardrails de entrada (`app/guardrails/input.py`)**: moderación (OpenAI
+  Moderation API, se omite sin clave y falla abierto ante error de red), detección de
+  prompt injection y de PII (email, IBAN, teléfono), ejecutados antes de cualquier
+  caché o llamada al LLM. Una infracción devuelve `400` con `{reason, message}`.
+- **Caché semántica (`app/cache/semantic.py`, `redisvl`)**: clave compuesta por un
+  *bucket* determinista (`prompt_version:project_type:detail_level:output_format`) y
+  una parte vectorial (embedding de la descripción + similitud coseno, umbral
+  configurable). Se consulta tras los guardrails de entrada y solo se escribe con el
+  resultado ya filtrado por `enforce_scope_response()`. Requirió migrar el servicio
+  `redis` de `docker-compose.yml` a `redis/redis-stack:7.4.0-v0` (RediSearch) y
+  aislar las pruebas de ese estado compartido mediante un fixture `autouse` en
+  `tests/conftest.py`.
+- **Streamlit (`streamlit_app.py`)**: indicador "Generating..." con contador de
+  segundos en vivo mientras dura la llamada (hilo en segundo plano, ya que Streamlit
+  no refresca durante una llamada bloqueante); badges `PROMPT vX` y `CACHED` sobre el
+  resultado; botón "Nueva estimación" que limpia el formulario mediante claves de
+  widget versionadas (`form_version`), más fiable que borrar entradas sueltas de
+  `session_state` dentro de un `st.form`.
 
 
