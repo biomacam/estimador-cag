@@ -20,3 +20,7 @@ def test_dead_provider_model_fields_were_removed() -> None:
     """
     assert "LLM_PROVIDER" not in Settings.model_fields
     assert "LLM_MODEL" not in Settings.model_fields
+
+
+def test_metadata_extractor_defaults_to_the_cheap_model() -> None:
+    assert Settings(_env_file=None).METADATA_EXTRACTOR_MODEL == "gpt-4o-mini"

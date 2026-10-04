@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from instructor.core import InstructorRetryException
 import structlog
@@ -22,17 +22,20 @@ from app.context.examples import format_examples_for_prompt, select_examples
 from app.dependencies import get_llm_wrapper
 from app.guardrails.input import check_input
 from app.guardrails.output import enforce_scope_response
-from app.prompts.loader import render_estimation_prompt
+from app.prompts.loader import render_conversational_prompt, render_estimation_prompt
 from app.schemas.estimation import (
-    EstimationRequest, EstimationResponse, EstimationResult, ExampleFormat, OutputFormat, PreprocessingMode,
+    DetailLevel, EstimationRequest, EstimationResponse, EstimationResult, ExampleFormat, OutputFormat,
+    PreprocessingMode, ProjectType,
 )
 from app.services.evaluation import OK_FINISH_REASONS
 from app.services.llm_wrapper import LLMTruncatedResponseError
+from app.services.metadata_extractor import update_metadata
 from app.services.security import (
     frame_untrusted_input,
     new_untrusted_data_tag,
     untrusted_data_instructions,
 )
+from app.sessions import Session
 
 log = structlog.get_logger()
 
@@ -257,6 +260,16 @@ def _invoke_structured_llm(
     )
 
 
+def _invoke_structured_chat(
+    *, messages: list[dict[str, str]]
+) -> tuple[EstimationResult, dict[str, Any]]:
+    return get_llm_wrapper().complete_structured_chat(
+        messages=messages,
+        response_model=EstimationResult,
+        max_tokens=DEFAULT_MAX_TOKENS,
+    )
+
+
 def render_structured_estimation(result: EstimationResult, output_format: OutputFormat) -> str:
     """Render validated data locally for clients that still display Markdown."""
     def inline(text: str) -> str:
@@ -302,11 +315,17 @@ def generate_typed_estimation(request: EstimationRequest, version: str = "v1") -
         prompt_version=version,
     )
 
+    return _run_structured_estimation(
+        lambda: _invoke_structured_llm(system_prompt=system_prompt, user_message=user_message),
+        request.output_format,
+    )
+
+
+def _run_structured_estimation(
+    invoke: Callable[[], tuple[EstimationResult, dict[str, Any]]], output_format: OutputFormat
+) -> dict[str, Any]:
     try:
-        result, meta = _invoke_structured_llm(
-            system_prompt=system_prompt,
-            user_message=user_message,
-        )
+        result, meta = invoke()
         result = EstimationResult.model_validate(result.model_dump())
         # Third layer of scope robustness: normalises the rare edge case where
         # the prompt instructions and the schema validator both allowed a
@@ -325,7 +344,7 @@ def generate_typed_estimation(request: EstimationRequest, version: str = "v1") -
         raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE) from exc
 
     return {
-        "estimation": render_structured_estimation(result, request.output_format),
+        "estimation": render_structured_estimation(result, output_format),
         "result": result,
         "cache_hit": meta.get("cache_hit", False),
     }
@@ -373,6 +392,61 @@ class EstimationService:
             prompt_version=version,
             result=generated["result"],
             cached=generated["cache_hit"],
+        )
+
+    def estimate_conversational(
+        self,
+        *,
+        session: Session,
+        transcript: str,
+        project_type: ProjectType,
+        detail_level: DetailLevel,
+        output_format: OutputFormat,
+        version: str = "v1",
+    ) -> EstimationResponse:
+        """One turn of a session: ``transcript`` already includes the attachments' text.
+
+        The system prompt is re-rendered each turn from the session's ``ProjectMetadata``
+        and kept as the history's system prompt, so the window never drops it. No cache
+        is used: the answer depends on the history, not just on this transcript.
+        """
+        check_input(transcript, openai_client=self.openai_client)
+
+        system_prompt, user_message = render_conversational_prompt(
+            transcript,
+            metadata=session.metadata,
+            project_type=project_type.value,
+            detail_level=detail_level.value,
+            output_format=output_format.value,
+            version=version,
+        )
+        session.history.system_prompt = system_prompt
+        messages = [*session.history.to_messages(), {"role": "user", "content": user_message}]
+        log.info(
+            "generating_conversational_estimation",
+            session_id=session.session_id,
+            history_messages=len(session.history.messages),
+            metadata_is_empty=session.metadata.is_empty(),
+            transcript_chars=len(transcript),
+            prompt_version=version,
+        )
+
+        generated = _run_structured_estimation(
+            lambda: _invoke_structured_chat(messages=messages), output_format
+        )
+        result: EstimationResult = generated["result"]
+
+        session.history.add("user", user_message)
+        session.history.add("assistant", result.model_dump_json())
+        session.metadata = update_metadata(
+            previous=session.metadata, transcript=transcript, result=result
+        )
+
+        return EstimationResponse(
+            text=generated["estimation"],
+            prompt_version=version,
+            result=result,
+            cached=False,
         )
 
 

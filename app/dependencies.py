@@ -11,6 +11,7 @@ from openai import OpenAI
 from app.config import get_settings
 from app.services.cache import EstimationCache
 from app.services.llm_wrapper import LLMConfigurationError, LLMWrapper
+from app.sessions import SessionStore
 
 if TYPE_CHECKING:
     from app.cache.semantic import EstimationSemanticCache
@@ -72,6 +73,11 @@ def get_semantic_cache() -> EstimationSemanticCache | None:
             error_type=type(exc).__name__, error=str(exc)[:200],
         )
         return None
+
+
+@lru_cache
+def get_session_store() -> SessionStore:
+    return SessionStore(max_turns=get_settings().MAX_CONVERSATION_TURNS)
 
 
 @lru_cache

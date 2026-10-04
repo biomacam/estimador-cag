@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
-from app.routers import estimations
+from app.routers import estimations, sessions
 from app.services.llm_wrapper import LLMConfigurationError
 
 
@@ -57,6 +57,7 @@ app = FastAPI(
 )
 
 app.include_router(estimations.router)
+app.include_router(sessions.router)
 
 
 @app.exception_handler(LLMConfigurationError)

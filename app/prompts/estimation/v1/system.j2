@@ -28,6 +28,7 @@ assumptions that justify its scope.
 {% endif %}
 
 {{ untrusted_data_instructions }}
+{% include "estimation/_shared/conversation_context.j2" %}
 
 {% if reference_projects %}
 The user has also provided these similar past projects as additional context:

@@ -250,6 +250,120 @@ la versión realmente usada en `prompt_version`.
 
 ---
 
+## Sesion 5 — Sesiones y adjuntos PDF/Word (extracción local)
+
+Dos endpoints nuevos, con el estado de sesión en memoria del proceso (`app/sessions.py`,
+sin BBDD ni Redis: se pierde al reiniciar el servicio):
+
+- `POST /sessions` → `201 {"session_id": "<uuid v4>"}`. El cliente envía ese id en las
+  peticiones posteriores.
+- `POST /sessions/{session_id}/estimate` → `EstimationResponse`, igual que
+  `/api/v1/estimate`. Acepta `multipart/form-data`:
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `transcript` | texto | Obligatorio, 20 a 50.000 caracteres. |
+| `attachments` | lista de ficheros | Opcional. PDF o DOCX. |
+| `project_type`, `detail_level`, `output_format` | texto | Opcionales; por defecto `web_saas`, `medium`, `phases_table`. |
+
+```bash
+curl -s -X POST "http://localhost:8000/sessions/$SESSION_ID/estimate" \
+  -F "transcript=We need a customer portal with invoices and reports." \
+  -F "attachments=@requisitos.pdf" \
+  -F "attachments=@notas.docx"
+```
+
+**Qué hace el servicio.** `app/attachments.py` extrae el texto en local (`pypdf` para PDF,
+`python-docx` para Word, incluidas las tablas) y lo concatena al `transcript` con un
+separador por fichero antes de renderizar el prompt:
+
+```
+<transcript>
+
+--- attachment: requisitos.pdf ---
+<texto del PDF>
+
+--- attachment: notas.docx ---
+<texto del Word>
+```
+
+El texto resultante entra en el prompt dentro de la frontera anti-inyección habitual y pasa
+por los guardrails de entrada (moderación, inyección, PII) igual que cualquier otra
+entrada. Un adjunto con instrucciones maliciosas se rechaza con `400` antes de llegar al LLM.
+El nombre del fichero se reduce a su basename sin caracteres de control para que no pueda
+falsificar un separador.
+
+**Límites y errores** (configurables en `app/config.py`):
+
+| Caso | Respuesta |
+| --- | --- |
+| `session_id` desconocido | `404` |
+| Extensión distinta de `.pdf` / `.docx` | `415` |
+| Fichero mayor de `MAX_ATTACHMENT_BYTES` (10 MB) | `413` |
+| Más de `MAX_ATTACHMENTS` (5) ficheros | `422` |
+| Fichero corrupto, cifrado o sin texto extraíble | `422` |
+
+Cada fichero se trunca a `MAX_ATTACHMENT_CHARS` (30.000 caracteres) con un aviso explícito
+`[attachment truncated at N characters]` en el propio texto.
+
+**Por qué extracción local y no enviar los documentos sin procesar al LLM.**
+
+- **Independencia del proveedor.** El flujo estructurado usa LiteLLM con un modelo primario
+  y otro de respaldo de proveedores distintos. Las Files API de OpenAI y Anthropic son
+  distintas y cambiar `PRIMARY_MODEL` rompería el soporte de adjuntos. Con texto en el
+  prompt, cualquier modelo sirve.
+- **Los guardrails actúan sobre texto.** La detección de inyección y de PII son reglas sobre
+  texto. Un binario enviado directamente al proveedor eludiría esas defensas y los
+  documentos son una vía clásica de inyección indirecta.
+- **Coste y contexto acotados.** Con el texto en nuestro lado, el tamaño máximo que entra en
+  el prompt es conocido y se limita. Un PDF subido al proveedor se tokeniza como texto e
+  imágenes de página, con un coste difícil de predecir.
+- **La caché exacta sigue funcionando.** La clave incluye el contenido del prompt; un
+  identificador opaco de fichero no permitiría saber si dos peticiones son equivalentes.
+- **Privacidad.** No se crean ficheros persistentes en la cuenta del proveedor. El texto sí
+  viaja al LLM dentro del prompt.
+- **Preparado para chunking.** Texto plano normalizado es la entrada que necesitará el
+  troceado de RAG en el módulo 3.
+- **Tests sin red.** La extracción se prueba con documentos generados en memoria.
+
+**Qué se pierde.** Diagramas, imágenes y maquetación no llegan al modelo, y un PDF escaneado
+sin capa de texto se rechaza (no hay OCR). Tampoco se admite el formato `.doc` antiguo. Si el
+caso de uso dependiera de contenido visual, el envío directo a un modelo multimodal sería la
+alternativa, a cambio del acoplamiento a un proveedor.
+
+**Memoria de la sesión.** Cada llamada es un turno de la conversación:
+
+- **Historial con ventana deslizante** (`MAX_CONVERSATION_TURNS`, 6 pares usuario/asistente por
+  defecto). El system prompt se guarda aparte de los mensajes, así que la ventana nunca lo
+  descarta; se vuelve a renderizar en cada turno.
+- **`ProjectMetadata`** (`project_name`, `assumed_team_size`, `mentioned_technologies`,
+  `agreed_scope`) vive separado del historial y se inyecta en el system prompt como bloque
+  `<project_metadata>` (vacío en el primer turno). Tras cada estimación, una segunda llamada
+  al LLM (`app/services/metadata_extractor.py`, modelo `METADATA_EXTRACTOR_MODEL`, por defecto
+  `gpt-4o-mini`; requiere `OPENAI_API_KEY`) extrae los hechos nuevos: los escalares no nulos
+  sobrescriben y las tecnologías se acumulan sin duplicados. Si la extracción falla, se
+  conservan los metadatos anteriores y el turno sigue siendo válido.
+- **Por qué un extractor LLM y no una heurística.** Una llamada con un prompt corto a un
+  modelo barato cuesta muy poco y aguanta mucho mejor las paráfrasis del usuario que unas
+  expresiones regulares ("somos cuatro devs", "un equipo de 4 personas"). Con `ProjectMetadata`
+  como `response_model`, Instructor valida el resultado y reintenta si no cumple el esquema.
+- Como los metadatos los rellena un LLM a partir de texto externo y se reinyectan en cada
+  turno, sus campos de texto también se enmarcan como datos no confiables en el prompt.
+- Este flujo no usa caché exacta ni semántica: la respuesta depende del historial y no solo
+  del transcript. Por eso usa `LLMWrapper.complete_structured_chat`, que recibe la lista de
+  mensajes completa.
+- Si la estimación falla, ni el historial ni los metadatos se modifican.
+
+**Limitaciones conocidas.** El historial guarda cada mensaje de usuario completo, adjuntos
+incluidos, así que varios turnos con ficheros grandes pueden acercarse al límite de contexto
+del modelo. Las sesiones no están protegidas frente a peticiones concurrentes sobre el mismo
+`session_id`.
+
+Las dependencias `pypdf`, `python-docx` y `python-multipart` son nuevas; hay que reconstruir
+la imagen: `docker compose up -d --build estimator streamlit`.
+
+---
+
 ## Arquitectura inicial
 
 El servicio sigue una **arquitectura por capas**: cada capa depende únicamente de la inmediatamente inferior, y toda petición atraviesa la misma secuencia HTTP → orquestación → infraestructura LLM → proveedor externo.

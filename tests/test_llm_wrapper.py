@@ -425,3 +425,31 @@ def test_complete_stream_raises_and_skips_cache_when_truncated(wrapper: LLMWrapp
                 )
             )
     assert mocked_again.call_count == 1
+
+
+def test_complete_structured_chat_sends_the_messages_verbatim_and_is_never_cached(
+    wrapper: LLMWrapper,
+) -> None:
+    from unittest.mock import Mock
+
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "reply"},
+        {"role": "user", "content": "second"},
+    ]
+    client = Mock()
+    client.chat.completions.create.return_value = _structured_result()
+    with patch("app.services.llm_wrapper.instructor.from_litellm", return_value=client):
+        first, meta = wrapper.complete_structured_chat(
+            messages=messages, response_model=EstimationResult,
+        )
+        wrapper.complete_structured_chat(messages=messages, response_model=EstimationResult)
+
+    assert first == _structured_result()
+    assert meta["cache_hit"] is False
+    assert client.chat.completions.create.call_count == 2
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["messages"] == messages
+    assert kwargs["model"] == "gpt-4o-mini"
+    assert kwargs["api_key"] == "fake-openai"

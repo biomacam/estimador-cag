@@ -206,6 +206,49 @@ class LLMWrapper:
         log.info("llm_structured_call_completed", **meta)
         return validated, {**meta, "cache_hit": False}
 
+    def complete_structured_chat(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        response_model: type[StructuredResult],
+        model_override: str | None = None,
+        max_tokens: int = 4000,
+        max_retries: int = 6,
+    ) -> tuple[StructuredResult, dict[str, Any]]:
+        """``complete_structured`` for a ready-made ``messages`` list (system + history + user).
+
+        Never cached: a key would have to cover the whole history, and every turn differs.
+        """
+        target_model = model_override or self.primary_model
+        provider = _provider_from_model(target_model)
+        mode = instructor.Mode.TOOLS if provider == "anthropic" else instructor.Mode.JSON_SCHEMA
+        client = instructor.from_litellm(litellm.completion, mode=mode)
+        log.info(
+            "llm_structured_chat_started",
+            model=target_model,
+            response_model=response_model.__name__,
+            mode=mode.value,
+            messages=len(messages),
+        )
+        started = time.perf_counter()
+        result = client.chat.completions.create(
+            model=target_model,
+            api_key=self._api_key_for(target_model),
+            timeout=self.timeout,
+            messages=messages,
+            response_model=response_model,
+            max_tokens=max_tokens,
+            max_retries=max_retries,
+        )
+        validated = response_model.model_validate(result.model_dump())
+        meta = {
+            "model": _normalise_model_name(target_model),
+            "provider": provider,
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+        }
+        log.info("llm_structured_chat_completed", **meta)
+        return validated, {**meta, "cache_hit": False}
+
     def complete(
         self,
         *,

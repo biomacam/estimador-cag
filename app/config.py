@@ -33,6 +33,18 @@ class Settings(BaseSettings):
 
     ESTIMATOR_API_BASE_URL: str = "http://localhost:8000"
 
+    # --- Session attachments (local PDF/DOCX text extraction) ---
+    MAX_ATTACHMENTS: int = 5
+    MAX_ATTACHMENT_BYTES: int = 10 * 1024 * 1024
+    # Per file, after extraction: bounds the tokens a single upload can add to the prompt.
+    MAX_ATTACHMENT_CHARS: int = 30_000
+
+    # --- Conversational sessions ---
+    # user+assistant pairs kept in each session's history window.
+    MAX_CONVERSATION_TURNS: int = 6
+    # Cheap model for the per-turn ProjectMetadata extraction (needs OPENAI_API_KEY).
+    METADATA_EXTRACTOR_MODEL: str = "gpt-4o-mini"
+
     @property
     def is_llm_configured(self) -> bool:
         """True when at least one provider API key is set.
