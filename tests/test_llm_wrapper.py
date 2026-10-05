@@ -1,10 +1,13 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import fakeredis
+import litellm
 import pytest
 
 from app.services.cache import EstimationCache
+from app.schemas.estimation import EstimationResult
 from app.services.llm_wrapper import LLMTruncatedResponseError, LLMWrapper, _estimate_cost
 
 
@@ -38,6 +41,139 @@ def wrapper() -> LLMWrapper:
         num_retries=2,
         cache=cache,
     )
+
+
+def _structured_result() -> EstimationResult:
+    return EstimationResult(
+        summary="Build a booking system with payments.",
+        confidence_pct=80,
+        phases=[{
+            "name": "Implementation", "duration_weeks": 4, "cost_eur": 10000,
+            "summary": "Build booking and payment integrations.",
+        }],
+        total_duration_weeks=4,
+        total_cost_eur=10000,
+    )
+
+
+def test_complete_structured_validates_and_replays_cached_result(wrapper: LLMWrapper) -> None:
+    from unittest.mock import Mock
+
+    result = _structured_result()
+    client = Mock()
+    client.chat.completions.create.return_value = result
+    with patch("app.services.llm_wrapper.instructor.from_litellm", return_value=client):
+        first, meta = wrapper.complete_structured(
+            system_prompt="sys", user_message="usr", response_model=EstimationResult,
+        )
+        second, cached_meta = wrapper.complete_structured(
+            system_prompt="sys", user_message="usr", response_model=EstimationResult,
+        )
+    assert first == second == result
+    assert meta["cache_hit"] is False
+    assert cached_meta["cache_hit"] is True
+    assert client.chat.completions.create.call_count == 1
+    assert client.chat.completions.create.call_args.kwargs["response_model"] is EstimationResult
+    assert client.chat.completions.create.call_args.kwargs["max_retries"] == 6
+
+
+@pytest.mark.parametrize(
+    ("model", "key", "mode"),
+    [("gpt-4o-mini", "fake-openai", "JSON_SCHEMA"),
+     ("claude-haiku-4-5-20251001", "fake-anthropic", "TOOLS")],
+)
+def test_complete_structured_selects_provider_mode_and_key(
+    wrapper: LLMWrapper, model: str, key: str, mode: str,
+) -> None:
+    import instructor
+    from unittest.mock import Mock
+
+    client = Mock()
+    client.chat.completions.create.return_value = _structured_result()
+    with patch("app.services.llm_wrapper.instructor.from_litellm", return_value=client) as factory:
+        wrapper.complete_structured(
+            system_prompt="sys", user_message="usr", response_model=EstimationResult,
+            model_override=model,
+        )
+    assert factory.call_args.kwargs["mode"] == getattr(instructor.Mode, mode)
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["model"] == model
+    assert kwargs["api_key"] == key
+    assert kwargs["messages"] == [
+        {"role": "system", "content": "sys"}, {"role": "user", "content": "usr"},
+    ]
+
+
+def test_instructor_retries_invalid_costs_then_caches_valid_result(wrapper: LLMWrapper) -> None:
+    valid = _structured_result().model_dump(mode="json")
+    invalid = {**valid, "total_cost_eur": 10001}
+    responses = [
+        litellm.ModelResponse(
+            model="gpt-4o-mini",
+            choices=[{
+                "message": {"role": "assistant", "content": json.dumps(payload)},
+                "finish_reason": "stop",
+            }],
+            usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+        )
+        for payload in [invalid, valid]
+    ]
+    with patch("app.services.llm_wrapper.litellm.completion", side_effect=responses) as provider:
+        result, meta = wrapper.complete_structured(
+            system_prompt="sys", user_message="usr", response_model=EstimationResult,
+        )
+        cached, cached_meta = wrapper.complete_structured(
+            system_prompt="sys", user_message="usr", response_model=EstimationResult,
+        )
+    assert provider.call_count == 2
+    assert result == cached == _structured_result()
+    assert meta["cache_hit"] is False
+    assert cached_meta["cache_hit"] is True
+    assert provider.call_args.kwargs["response_format"]["type"] == "json_schema"
+
+
+def test_instructor_anthropic_tool_response_is_validated(wrapper: LLMWrapper) -> None:
+    response = litellm.ModelResponse(
+        model="claude-haiku-4-5-20251001",
+        choices=[{
+            "message": {
+                "role": "assistant", "content": None,
+                "tool_calls": [{
+                    "id": "call_test", "type": "function",
+                    "function": {
+                        "name": "EstimationResult",
+                        "arguments": _structured_result().model_dump_json(),
+                    },
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }],
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+    )
+    with patch("app.services.llm_wrapper.litellm.completion", return_value=response) as provider:
+        result, meta = wrapper.complete_structured(
+            system_prompt="sys", user_message="usr", response_model=EstimationResult,
+            model_override="claude-haiku-4-5-20251001",
+        )
+    assert result == _structured_result()
+    assert meta["provider"] == "anthropic"
+    assert provider.call_args.kwargs["tools"][0]["function"]["name"] == "EstimationResult"
+    assert provider.call_args.kwargs["tool_choice"]["function"]["name"] == "EstimationResult"
+
+
+def test_complete_structured_does_not_cache_failed_generation(wrapper: LLMWrapper) -> None:
+    from unittest.mock import Mock
+
+    client = Mock()
+    client.chat.completions.create.side_effect = RuntimeError("validation failed")
+    with patch("app.services.llm_wrapper.instructor.from_litellm", return_value=client):
+        for attempt in range(2):
+            with pytest.raises(RuntimeError, match="validation failed"):
+                wrapper.complete_structured(
+                    system_prompt="sys", user_message="usr", response_model=EstimationResult,
+                )
+    assert client.chat.completions.create.call_count == 2
+    assert wrapper.cache.redis.dbsize() == 0
 
 
 def test_estimate_cost_uses_pricing_table() -> None:
@@ -289,3 +425,31 @@ def test_complete_stream_raises_and_skips_cache_when_truncated(wrapper: LLMWrapp
                 )
             )
     assert mocked_again.call_count == 1
+
+
+def test_complete_structured_chat_sends_the_messages_verbatim_and_is_never_cached(
+    wrapper: LLMWrapper,
+) -> None:
+    from unittest.mock import Mock
+
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "reply"},
+        {"role": "user", "content": "second"},
+    ]
+    client = Mock()
+    client.chat.completions.create.return_value = _structured_result()
+    with patch("app.services.llm_wrapper.instructor.from_litellm", return_value=client):
+        first, meta = wrapper.complete_structured_chat(
+            messages=messages, response_model=EstimationResult,
+        )
+        wrapper.complete_structured_chat(messages=messages, response_model=EstimationResult)
+
+    assert first == _structured_result()
+    assert meta["cache_hit"] is False
+    assert client.chat.completions.create.call_count == 2
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["messages"] == messages
+    assert kwargs["model"] == "gpt-4o-mini"
+    assert kwargs["api_key"] == "fake-openai"

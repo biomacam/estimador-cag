@@ -25,6 +25,7 @@ risk or assumption per phase — one line each, no essays.
 {% endif %}
 
 {{ untrusted_data_instructions }}
+{% include "estimation/_shared/conversation_context.j2" %}
 
 {% if reference_projects %}
 Similar past projects for context:
@@ -36,5 +37,7 @@ Similar past projects for context:
 {% endif %}
 Two reference estimates follow. Match their brevity and pricing style, not their
 exact scope — adapt everything to the brief below.
+
+{% include "estimation/_shared/output_schema.j2" %}
 
 {% include "estimation/v2/examples.j2" %}

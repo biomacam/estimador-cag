@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.services import llm_service
+from tests.helpers import valid_estimation_result
 
 VALID_PAYLOAD = {
     "description": "Build a booking system for a yoga studio with class scheduling.",
@@ -18,20 +19,11 @@ def stub_invoke_llm(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     """Replace the LLM seam with a recording fake so no provider is called."""
     calls: list[dict] = []
 
-    def fake(*, system_prompt: str, user_message: str, **kwargs) -> dict:
+    def fake(*, system_prompt: str, user_message: str, **kwargs) -> tuple:
         calls.append({"system_prompt": system_prompt, "user_message": user_message})
-        return {
-            "estimation": "Fake estimation text",
-            "model": "gpt-4o-mini",
-            "provider": "openai",
-            "finish_reason": "stop",
-            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
-            "latency_ms": 1,
-            "cost_usd": 0.0,
-            "cache_hit": False,
-        }
+        return valid_estimation_result(), {"cache_hit": False}
 
-    monkeypatch.setattr(llm_service, "_invoke_llm", fake)
+    monkeypatch.setattr(llm_service, "_invoke_structured_llm", fake)
     return calls
 
 

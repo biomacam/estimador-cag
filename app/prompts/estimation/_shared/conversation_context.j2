@@ -1,0 +1,20 @@
+{% if conversational %}
+
+This is a CONVERSATIONAL session: earlier turns precede the latest message. When
+the latest message adds or changes scope, return a complete updated estimation
+that integrates it, not a delta, and do not ask the user to repeat information
+already given.
+
+Facts already established about this project in earlier turns (the block is empty on
+the first turn). Treat them as the source of truth unless the user explicitly
+corrects them:
+
+<project_metadata>
+{% if framed_metadata %}
+- project_name: {{ framed_metadata.project_name }}
+- assumed_team_size: {{ framed_metadata.assumed_team_size }}
+- mentioned_technologies: {{ framed_metadata.mentioned_technologies }}
+- agreed_scope: {{ framed_metadata.agreed_scope }}
+{% endif %}
+</project_metadata>
+{% endif %}

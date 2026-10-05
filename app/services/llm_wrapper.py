@@ -18,17 +18,23 @@ Design notes
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
-from typing import Any, Iterator
+from typing import Any, Iterator, TypeVar
 
+import instructor
 import litellm
 import structlog
 from litellm import Router
+from pydantic import BaseModel
 
 from app.services.cache import EstimationCache
 from app.services.evaluation import OK_FINISH_REASONS
 
 log = structlog.get_logger()
+
+StructuredResult = TypeVar("StructuredResult", bound=BaseModel)
 
 
 class LLMTruncatedResponseError(Exception):
@@ -133,6 +139,115 @@ class LLMWrapper:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def complete_structured(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        response_model: type[StructuredResult],
+        model_override: str | None = None,
+        max_tokens: int = 4000,
+        max_retries: int = 6,
+    ) -> tuple[StructuredResult, dict[str, Any]]:
+        """Generate and cache only validated structured responses via Instructor.
+
+        Uses the primary model directly, without the legacy Router's fallback.
+        """
+        target_model = model_override or self.primary_model
+        provider = _provider_from_model(target_model)
+        mode = instructor.Mode.TOOLS if provider == "anthropic" else instructor.Mode.JSON_SCHEMA
+        schema = json.dumps(response_model.model_json_schema(), sort_keys=True)
+        schema_digest = hashlib.sha256(schema.encode("utf-8")).hexdigest()
+        prompt_key = EstimationCache.make_key(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            model=target_model,
+            max_tokens=max_tokens,
+            thinking_budget=None,
+        )
+        cache_digest = hashlib.sha256(
+            f"{mode.value}:{schema_digest}:{prompt_key}".encode("utf-8")
+        ).hexdigest()
+        cache_key = f"structured:{cache_digest}"
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return response_model.model_validate(cached["result"]), {
+                **cached["meta"], "cache_hit": True,
+            }
+
+        client = instructor.from_litellm(litellm.completion, mode=mode)
+        log.info(
+            "llm_structured_call_started",
+            model=target_model,
+            response_model=response_model.__name__,
+            mode=mode.value,
+        )
+        started = time.perf_counter()
+        result = client.chat.completions.create(
+            model=target_model,
+            api_key=self._api_key_for(target_model),
+            timeout=self.timeout,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            response_model=response_model,
+            max_tokens=max_tokens,
+            max_retries=max_retries,
+        )
+        validated = response_model.model_validate(result.model_dump())
+        meta = {
+            "model": _normalise_model_name(target_model),
+            "provider": provider,
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+        }
+        self.cache.set(cache_key, {"result": validated.model_dump(mode="json"), "meta": meta})
+        log.info("llm_structured_call_completed", **meta)
+        return validated, {**meta, "cache_hit": False}
+
+    def complete_structured_chat(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        response_model: type[StructuredResult],
+        model_override: str | None = None,
+        max_tokens: int = 4000,
+        max_retries: int = 6,
+    ) -> tuple[StructuredResult, dict[str, Any]]:
+        """``complete_structured`` for a ready-made ``messages`` list (system + history + user).
+
+        Never cached: a key would have to cover the whole history, and every turn differs.
+        """
+        target_model = model_override or self.primary_model
+        provider = _provider_from_model(target_model)
+        mode = instructor.Mode.TOOLS if provider == "anthropic" else instructor.Mode.JSON_SCHEMA
+        client = instructor.from_litellm(litellm.completion, mode=mode)
+        log.info(
+            "llm_structured_chat_started",
+            model=target_model,
+            response_model=response_model.__name__,
+            mode=mode.value,
+            messages=len(messages),
+        )
+        started = time.perf_counter()
+        result = client.chat.completions.create(
+            model=target_model,
+            api_key=self._api_key_for(target_model),
+            timeout=self.timeout,
+            messages=messages,
+            response_model=response_model,
+            max_tokens=max_tokens,
+            max_retries=max_retries,
+        )
+        validated = response_model.model_validate(result.model_dump())
+        meta = {
+            "model": _normalise_model_name(target_model),
+            "provider": provider,
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+        }
+        log.info("llm_structured_chat_completed", **meta)
+        return validated, {**meta, "cache_hit": False}
 
     def complete(
         self,

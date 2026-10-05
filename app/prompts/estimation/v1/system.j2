@@ -28,6 +28,7 @@ assumptions that justify its scope.
 {% endif %}
 
 {{ untrusted_data_instructions }}
+{% include "estimation/_shared/conversation_context.j2" %}
 
 {% if reference_projects %}
 The user has also provided these similar past projects as additional context:
@@ -40,5 +41,7 @@ The user has also provided these similar past projects as additional context:
 Below are reference estimations from previous projects. Use them as a guide for
 structure, level of detail, and realistic pricing. Adapt the content to match the
 specific project described by the user.
+
+{% include "estimation/_shared/output_schema.j2" %}
 
 {% include "estimation/v1/examples.j2" %}
