@@ -209,9 +209,12 @@ def test_openapi_exposes_structured_response_and_documented_errors(client: TestC
     assert schemas["EstimationResult"]["properties"]["phases"]["items"]["$ref"] == "#/components/schemas/Phase"
 
 
-@pytest.mark.parametrize("error_type", [llm_service.LLMServiceError, RuntimeError])
+@pytest.mark.parametrize(
+    ("error_type", "reason_code"),
+    [(llm_service.LLMServiceError, "provider_error"), (RuntimeError, "unexpected_error")],
+)
 def test_service_error_details_are_not_returned_to_client(
-    client: TestClient, error_type: type[Exception],
+    client: TestClient, error_type: type[Exception], reason_code: str,
 ) -> None:
     class FailingService:
         def estimate(self, request, version):
@@ -223,7 +226,7 @@ def test_service_error_details_are_not_returned_to_client(
     finally:
         app.dependency_overrides.pop(get_estimation_service, None)
     assert response.status_code == 502
-    assert response.json() == {"detail": LLM_PROVIDER_ERROR_MESSAGE}
+    assert response.json() == {"detail": LLM_PROVIDER_ERROR_MESSAGE, "reason": {"code": reason_code}}
     assert "sk-proj" not in response.text
 
 

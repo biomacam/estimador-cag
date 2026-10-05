@@ -10,7 +10,8 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
-from instructor.core import InstructorRetryException
+from instructor.core import IncompleteOutputException, InstructorRetryException
+import openai
 import structlog
 from litellm.exceptions import APIError as LLMProviderAPIError
 from pydantic import ValidationError
@@ -28,6 +29,7 @@ from app.schemas.estimation import (
     PreprocessingMode, ProjectType,
 )
 from app.services.evaluation import OK_FINISH_REASONS
+from app.services.llm_errors import PROVIDER_ERROR, LLMFailureReason, classify_llm_error
 from app.services.llm_wrapper import LLMTruncatedResponseError
 from app.services.metadata_extractor import update_metadata
 from app.services.security import (
@@ -48,7 +50,16 @@ LLM_PROVIDER_ERROR_MESSAGE = "The LLM provider failed to generate the estimation
 
 
 class LLMServiceError(Exception):
-    """Raised when the LLM provider fails or returns a response we must not use as-is."""
+    """Raised when the LLM provider fails or returns a response we must not use as-is.
+
+    ``reason`` is the safe summary exposed to clients next to the generic message.
+    """
+
+    def __init__(
+        self, message: str = LLM_PROVIDER_ERROR_MESSAGE, *, reason: LLMFailureReason = PROVIDER_ERROR
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +332,16 @@ def generate_typed_estimation(request: EstimationRequest, version: str = "v1") -
     )
 
 
+_ESTIMATION_FAILURES = (
+    LLMProviderAPIError,
+    openai.APIError,
+    LLMTruncatedResponseError,
+    IncompleteOutputException,
+    InstructorRetryException,
+    ValidationError,
+)
+
+
 def _run_structured_estimation(
     invoke: Callable[[], tuple[EstimationResult, dict[str, Any]]], output_format: OutputFormat
 ) -> dict[str, Any]:
@@ -331,17 +352,15 @@ def _run_structured_estimation(
         # the prompt instructions and the schema validator both allowed a
         # low-confidence answer through without the "Out of scope:" prefix.
         result = enforce_scope_response(result)
-    except LLMProviderAPIError as exc:
+    except _ESTIMATION_FAILURES as exc:
+        reason = classify_llm_error(exc)
         log.error(
-            "typed_estimation_llm_call_failed", error=str(exc), error_type=type(exc).__name__
+            "llm_estimation_failed",
+            reason_code=reason.code,
+            error_type=type(exc).__name__,
+            error=str(exc)[:1000],
         )
-        raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE) from exc
-    except LLMTruncatedResponseError as exc:
-        log.error("typed_estimation_llm_call_truncated", error=str(exc))
-        raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE) from exc
-    except (InstructorRetryException, ValidationError) as exc:
-        log.error("typed_estimation_validation_failed", error_type=type(exc).__name__)
-        raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE) from exc
+        raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE, reason=reason) from exc
 
     return {
         "estimation": render_structured_estimation(result, output_format),
@@ -420,8 +439,10 @@ class EstimationService:
             output_format=output_format.value,
             version=version,
         )
-        session.history.system_prompt = system_prompt
-        messages = [*session.history.to_messages(), {"role": "user", "content": user_message}]
+        messages = [
+            *session.history.to_messages_list(system_prompt),
+            {"role": "user", "content": user_message},
+        ]
         log.info(
             "generating_conversational_estimation",
             session_id=session.session_id,

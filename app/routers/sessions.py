@@ -15,8 +15,9 @@ from app.dependencies import get_estimation_service, get_session_store
 from app.guardrails.input import InputGuardrailViolation
 from app.prompts.loader import PromptVersionNotFoundError
 from app.schemas.estimation import DetailLevel, EstimationResponse, OutputFormat, ProjectType
-from app.schemas.session import CreateSessionResponse
-from app.services.llm_service import LLM_PROVIDER_ERROR_MESSAGE, EstimationService
+from app.schemas.session import CreateSessionResponse, SessionInfoResponse
+from app.services.llm_errors import UNEXPECTED_ERROR
+from app.services.llm_service import LLM_PROVIDER_ERROR_MESSAGE, EstimationService, LLMServiceError
 from app.services.llm_wrapper import LLMConfigurationError
 from app.sessions import SessionNotFoundError, SessionStore
 
@@ -33,6 +34,27 @@ def create_session(store: SessionStore = Depends(get_session_store)) -> CreateSe
     return CreateSessionResponse(session_id=session.session_id)
 
 
+@router.get(
+    "/{session_id}",
+    response_model=SessionInfoResponse,
+    responses={404: {"description": "Unknown session_id"}},
+)
+def get_session(
+    session_id: str, store: SessionStore = Depends(get_session_store)
+) -> SessionInfoResponse:
+    """Current project metadata and history size of a session (handy for debugging)."""
+    try:
+        session = store.get(session_id)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session_not_found") from exc
+    return SessionInfoResponse(
+        session_id=session.session_id,
+        message_count=len(session.history.messages),
+        max_turns=session.history.max_turns,
+        metadata=session.metadata,
+    )
+
+
 @router.post(
     "/{session_id}/estimate",
     response_model=EstimationResponse,
@@ -42,7 +64,7 @@ def create_session(store: SessionStore = Depends(get_session_store)) -> CreateSe
         413: {"description": "An attachment exceeds the size limit"},
         415: {"description": "An attachment is not a PDF or DOCX"},
         422: {"description": "Invalid request, unreadable attachment or unknown prompt version"},
-        502: {"description": "LLM generation or structured validation failed"},
+        502: {"description": "LLM generation failed; the body adds reason.code (and a safe reason.message)"},
         503: {"description": "No LLM provider credentials configured"},
     },
 )
@@ -111,11 +133,11 @@ def estimate_in_session(
         ) from exc
     except PromptVersionNotFoundError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except LLMConfigurationError:
+    except (LLMConfigurationError, LLMServiceError):
         raise
     except Exception as exc:
         log.error("session_estimate_error", error_type=type(exc).__name__)
-        raise HTTPException(status_code=502, detail=LLM_PROVIDER_ERROR_MESSAGE) from exc
+        raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE, reason=UNEXPECTED_ERROR) from exc
 
 
 def _extract_upload(upload: UploadFile, settings: Settings) -> str:

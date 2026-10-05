@@ -21,23 +21,57 @@ En modulos posteriores del master, este servicio evolucionara a una arquitectura
 
 ## Inicio rapido con Docker (recomendado)
 
-1. Clonar el repositorio y entrar al directorio:
-   ```bash
-   cd estimator
-   ```
+Desde la carpeta de `estimador-cag`, con Docker Compose.
 
-2. Copiar el archivo de variables de entorno y configurar las API keys:
-   ```bash
-   cp .env.example .env
-   # Editar .env y poner tu API key real
-   ```
+### 1. Arrancar
 
-3. Construir y levantar el servicio:
-   ```bash
-   docker compose up --build
-   ```
+```powershell
+cd C:\Fuentes\LIDR\estimador-cag
+docker compose up -d --build
+docker compose ps
+```
 
-4. El servicio estara disponible en `http://localhost:8000`
+`--build` es necesario porque hay dependencias nuevas (`pypdf`, `python-docx`,
+`python-multipart`). Cuando los tres servicios estén `healthy` o `running`:
+
+- **Streamlit:** http://localhost:8501
+- **API y Swagger:** http://localhost:8000/docs
+
+### 2. Qué probar en Streamlit
+
+1. Al cargar la página se crea una sesión; su id aparece en el panel lateral.
+2. Escribe una transcripción (mínimo 20 caracteres), adjunta un PDF o Word y pulsa
+   **Estimate project**.
+3. Haz un segundo turno que añada información, por ejemplo "somos un equipo de 4 y usamos
+   Postgres". En el panel lateral se rellena el `project_metadata` y crece el historial.
+4. Pulsa **Nueva conversación** para crear otra sesión y vaciar todo.
+
+### 3. Probarlo por API (opcional)
+
+En PowerShell hay que usar `curl.exe`, porque `curl` es un alias de otro comando:
+
+```powershell
+$sid = (curl.exe -s -X POST http://localhost:8000/sessions | ConvertFrom-Json).session_id
+curl.exe -s -X POST "http://localhost:8000/sessions/$sid/estimate" `
+  -F "transcript=We need a customer portal with invoices and reports." `
+  -F "attachments=@requisitos.pdf"
+curl.exe -s "http://localhost:8000/sessions/$sid"
+```
+
+### 4. Si algo falla
+
+- **Logs:** `docker compose logs --since=10m estimator`.
+- **Un `502`:** suele ser que `gpt-4o-mini` no consigue que las fases sumen el total. Prueba
+  `PRIMARY_MODEL=gpt-4o` en el `.env` y recrea con
+  `docker compose up -d --force-recreate estimator`.
+- **La metadata no se actualiza:** casi siempre falta `OPENAI_API_KEY` o el modelo del
+  extractor no corresponde a tu clave.
+
+### Sin Docker para la API
+
+Deja Redis arrancado con `docker compose up -d redis`, pon `REDIS_URL=redis://localhost:6379`
+en el `.env` y lanza en dos terminales `uv run uvicorn app.main:app --reload` y
+`uv run streamlit run streamlit_app.py`.
 
 ## Alternativa: ejecucion local sin Docker
 
@@ -52,22 +86,74 @@ uv run uvicorn app.main:app --reload
 ```
 estimador-cag/
 ├── app/
-│   ├── main.py            # Aplicacion FastAPI, health check, CORS
-│   ├── config.py           # Configuracion con Pydantic Settings
+│   ├── main.py                        # FastAPI app, /health y manejadores de error 503 y 502
+│   ├── config.py                      # Settings (Pydantic Settings, .env)
+│   ├── dependencies.py                # Singletons cacheados: caches, LLMWrapper y SessionStore
+│   ├── sessions.py                    # ConversationHistory (ventana), ProjectMetadata, Session, SessionStore
+│   ├── attachments.py                 # Extraccion de texto de PDF/DOCX y errores asociados
 │   ├── routers/
-│   │   └── estimations.py  # Endpoint POST /api/v1/estimate
-│   ├── services/
-│   │   └── llm_service.py  # Logica de negocio, llamadas al LLM
+│   │   ├── estimations.py             # POST /api/v1/estimate y streaming SSE
+│   │   └── sessions.py                # POST /sessions, GET /sessions/{id}, POST /sessions/{id}/estimate
 │   ├── schemas/
-│   │   └── estimation.py   # Modelos Pydantic (request/response)
-│   └── context/
-│       └── examples.py     # Ejemplos de estimacion (contexto CAG)
+│   │   ├── estimation.py              # EstimationRequest, EstimationResult, EstimationResponse, enums
+│   │   └── session.py                 # CreateSessionResponse, SessionInfoResponse
+│   ├── services/
+│   │   ├── llm_service.py             # EstimationService: guardrails, prompts, llamada estructurada, turno conversacional
+│   │   ├── llm_wrapper.py             # LiteLLM + Instructor, fallback, streaming, cost tracking
+│   │   ├── llm_errors.py              # Clasifica fallos del LLM en un codigo seguro para el 502
+│   │   ├── metadata_extractor.py      # Segunda llamada por turno que actualiza el ProjectMetadata
+│   │   ├── cache.py                   # Redis exact-match cache
+│   │   ├── evaluation.py              # Utilidades de evaluacion del texto generado
+│   │   └── security.py                # Marcado de texto externo como dato (anti prompt injection)
+│   ├── guardrails/
+│   │   ├── input.py                   # Moderacion, prompt injection y PII
+│   │   └── output.py                  # Normalizacion de respuestas de baja confianza
+│   ├── cache/
+│   │   └── semantic.py                # Cache semantica (bucket + similitud de embeddings)
+│   ├── context/
+│   │   └── examples.py                # Ejemplos de referencia del contexto CAG
+│   ├── prompts/
+│   │   ├── loader.py                  # Environment Jinja2 + render_*_prompt
+│   │   ├── estimation/
+│   │   │   ├── _shared/
+│   │   │   │   ├── output_schema.j2        # Contrato de salida compartido
+│   │   │   │   └── conversation_context.j2 # Bloque <project_metadata> y aviso de conversacion
+│   │   │   ├── v1/                    # system.j2, user.j2, examples.j2
+│   │   │   └── v2/                    # system.j2, user.j2, examples.j2
+│   │   └── metadata_extraction/
+│   │       └── v1/                    # system.j2, user.j2 del extractor de metadata
+│   └── static/
+│       └── sse_demo.html              # Demo del streaming SSE
 ├── tests/
-│   └── test_health.py      # Tests basicos
-└── pyproject.toml          # Dependencias y configuracion
-└── src/estimador_cag       
-   └── _init_.py            # este fichero y la carpeta padre me la ha creado la IA para   #resolver un problema que había con los import structlog en varios ficheros
+│   ├── conftest.py                    # Fixtures compartidas
+│   ├── helpers.py                     # Generadores de PDF/DOCX y resultados validos
+│   ├── test_sessions*.py              # Sesiones, ventana, metadata y adjuntos (unit, endpoint, contrato, integracion)
+│   ├── test_attachments.py
+│   ├── test_metadata_extractor.py
+│   ├── test_estimate_*.py             # Endpoint de estimacion, prompt_version y streaming
+│   ├── test_llm_service.py
+│   ├── test_llm_wrapper.py
+│   ├── test_llm_errors.py
+│   ├── test_guardrails_*.py           # Guardrails de entrada y salida
+│   ├── test_prompt_injection_defense.py
+│   ├── test_cache_semantic.py
+│   ├── test_cag_invariant.py
+│   ├── test_examples_format.py
+│   ├── test_config.py
+│   ├── test_schemas.py
+│   ├── test_health.py
+│   ├── test_evaluation.py
+│   ├── test_streamlit_app.py          # Cliente Streamlit con HTTP simulado
+│   └── prompts/                       # test_estimation_v1.py, test_estimation_v2.py, test_conversational.py
+├── src/estimador_cag/__init__.py      # Paquete auxiliar
+├── streamlit_app.py                   # Cliente: sesion, formulario con adjuntos, panel de metadata
+├── test.json                          # Payload de ejemplo para el streaming
+├── Dockerfile                         # Multi-stage con uv
+├── docker-compose.yml                 # estimator + redis + streamlit
+├── pyproject.toml
+└── .env.example
 ```
+
 ## Documentacion interactiva
 
 Con el servicio corriendo, accede a la documentacion Swagger UI en:
@@ -76,187 +162,17 @@ Con el servicio corriendo, accede a la documentacion Swagger UI en:
 - **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
-## Sesion 3 — LiteLLM, Redis cache, SSE y Streamlit
-
-A partir de la Sesion 3 el servicio incorpora una capa de wrapper sobre el LLM que anade:
-
-- **Fallback de proveedor** (LiteLLM Router) — si el modelo primario falla, se intenta el secundario
-- **Cache exact-match** en Redis — la misma transcripcion no vuelve a pagar tokens
-- **Streaming SSE** — endpoint `POST /api/v1/estimate/stream` que emite los tokens segun llegan
-- **UI Streamlit** — cliente real que consume el endpoint SSE
-
-### Arrancar la stack completa
-
-```bash
-cd estimator
-docker compose up --build
-# La API queda en http://localhost:8000 y Redis en redis://localhost:6379
-```
-
-### Probar el endpoint SSE
-
-Demo HTML: abrir [http://localhost:8000/static/sse_demo.html](http://localhost:8000/static/sse_demo.html).
-
-Desde CLI:
-```bash
-curl -N -X POST http://localhost:8000/api/v1/estimate/stream \
-  -H 'Content-Type: application/json' \
-  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}'
-```
-
-### Verificar la cache
-
-```bash
-# La misma peticion dos veces — la segunda devuelve cache_hit: true
-curl -s localhost:8000/api/v1/estimate -H 'Content-Type: application/json' \
-  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}' \
-  | jq '{cache_hit, cost_usd}'
-
-# Inspeccionar las claves en Redis
-docker compose exec redis redis-cli KEYS 'estimation:*'
-```
-
-### Streamlit
-
-**Opción A — dentro de Docker Compose** (mismo `docker compose up --build` de arriba, ya
-levanta un tercer servicio `streamlit` en `http://localhost:8501`, conectado al `estimator`
-por la red interna de Compose):
-
-```bash
-docker compose up --build
-# Abrir http://localhost:8501
-```
-
-**Opción B — ejecutar la API y Streamlit fuera de Docker**, usando Docker solo para Redis:
-
-En `.env`, configura `REDIS_URL=redis://localhost:6379` (es el valor local por defecto;
-Compose lo sobrescribe internamente con `redis://redis:6379`). Inicia Redis:
-
-```bash
-docker compose up -d redis
-```
-
-En una terminal, inicia FastAPI:
-
-```bash
-uv run uvicorn app.main:app --reload
-```
-
-En otra terminal, inicia Streamlit:
-
-```bash
-uv run streamlit run streamlit_app.py
-```
-
-Abre `http://localhost:8501`. Streamlit llama a FastAPI en `http://localhost:8000`,
-configurado por `ESTIMATOR_API_BASE_URL`. Si Redis ya está instalado localmente, no hace
-falta arrancar el servicio Redis de Compose.
-
----
-
-## Sesion 4 — Contrato tipado, prompts versionados en Jinja2 y frontera anti-inyección
-
-`POST /api/v1/estimate` ya no recibe una transcripción libre: acepta un `EstimationRequest`
-tipado (`description`, `project_type`, `detail_level`, `output_format`) y responde con
-`EstimationResponse` (`result`, `text`, `prompt_version`, `cached`). El cliente Streamlit expone estos mismos
-campos mediante un `st.form`.
-
-Los prompts viven fuera del código Python, versionados por directorio:
-
-```
-app/prompts/
-├── loader.py                     # render_estimation_prompt(request, version="v1")
-└── estimation/
-    ├── v1/
-    │   ├── system.j2             # rol, formato/detalle condicionales, {% include examples.j2 %}
-    │   ├── user.j2                # bloque con la descripción del proyecto
-    │   └── examples.j2           # 2-3 ejemplos few-shot
-    └── v2/                       # variante deliberada: tono directo/ejecutivo + ejemplos propios
-        ├── system.j2
-        ├── user.j2
-        └── examples.j2
-```
-
-`render_estimation_prompt` devuelve `(system, user)` como dos mensajes separados
-(`role: "system"` / `role: "user"`) — nunca concatenados. El servicio añade instrucciones
-de salida estructurada y llama a `LLMWrapper.complete_structured()` con
-`response_model=EstimationResult`.
-
-**Instructor + LiteLLM.** Instructor envuelve `litellm.completion`: usa `Mode.JSON_SCHEMA`
-para OpenAI y `Mode.TOOLS` para Anthropic. El esquema exige `summary`, `confidence_pct`,
-`phases`, `total_duration_weeks` y `total_cost_eur`. Cada `Phase` contiene `name`,
-`duration_weeks`, `cost_eur` y `summary`. Los validadores Pydantic exigen la suma exacta
-de costes y el prefijo `Out of scope:` si la confianza es inferior al 30 %.
-Instructor recibe `max_retries=6` (un intento inicial y hasta seis reintentos).
-Si no consigue una respuesta válida, el endpoint devuelve `502` con un mensaje genérico.
-
-El flujo estructurado usa directamente el modelo primario, sin fallback automático.
-Su caché Redis está separada de la de texto e incluye el esquema, el modo de Instructor,
-los prompts, el modelo y el límite de tokens. Solo guarda resultados validados y vuelve
-a validarlos al leerlos. `cached` indica si se reutilizó una respuesta.
-`text` se genera localmente a partir del resultado validado, respetando `output_format`,
-para mantener Streamlit compatible. El streaming y el flujo antiguo siguen siendo de texto.
-
-**Robustez de scope, en tres capas.** 1) El prompt (`output_schema.j2`) pide
-explícitamente declarar `Out of scope:` si `confidence_pct` cae por debajo del
-umbral. 2) El `@model_validator` en `EstimationResult` lo exige, forzando a
-Instructor a reintentar. 3) `app/guardrails/output.py::enforce_scope_response()`
-es la última red: tras validar el resultado, reescribe el caso límite (una
-confianza baja sin el prefijo, solo alcanzable si algo muta el objeto tras su
-construcción) en una `EstimationResult` de marcador de posición, sin lanzar
-nunca una excepción.
-
-**Endpoint y dependencias.** El router recibe `EstimationService` mediante
-`Depends(get_estimation_service)` y delega en `service.estimate(request, version=prompt_version)`.
-El servicio construye `EstimationResponse`; el router solo traduce errores a HTTP:
-`422` para versiones desconocidas o datos invalidos, `502` para fallos de generacion o
-validacion y `503` si faltan credenciales. Los errores `502` no exponen detalles internos.
-El contrato completo se publica en `/docs` y `/openapi.json`, incluyendo `Phase` y
-`EstimationResult`. La fabrica del servicio no resuelve credenciales al arrancar:
-el wrapper y Redis siguen usando las fabricas compartidas y se resuelven al estimar.
-Las pruebas pueden sustituir el servicio mediante `app.dependency_overrides`.
-Pydantic 2.x, Instructor y LiteLLM son dependencias directas del proyecto.
-
-**Guardrails de entrada.** `EstimationService.estimate()` llama a
-`app/guardrails/input.py::check_input()` antes de cualquier caché o llamada al LLM, con
-tres capas que se detienen en la primera infracción: moderación (OpenAI Moderation API,
-se omite sin `OPENAI_API_KEY` y falla abierto si la API no responde), deteccion de
-prompt injection (patrones regex) y deteccion de PII (correo, IBAN, telefono). Una
-infraccion lanza `InputGuardrailViolation`, que el router traduce a `400` con
-`{"reason", "message"}`. El cliente OpenAI usado para moderar se resuelve de forma
-perezosa en `get_openai_client()` (`app/dependencies.py`), igual que el resto de
-credenciales.
-
-Las dependencias utilizan Instructor 1.x y OpenAI SDK 2.x por compatibilidad. Tras este
-cambio de dependencias, Docker requiere reconstruir las imágenes desde este directorio:
-
-```powershell
-docker compose up -d --build estimator streamlit
-```
-
-**Frontera anti-inyección también en el flujo tipado.** `description` es texto externo, igual
-que la transcripción del flujo anterior, así que `render_estimation_prompt` nunca la interpola
-cruda: la envuelve con un tag fijo (`app/services/security.py`,
-`frame_untrusted_input` / `new_untrusted_data_tag`, compartido con `llm_service.py` para evitar
-un import circular con el loader) y añade al `system.j2` una instrucción explícita de que ese
-bloque es dato, nunca instrucciones. Cubierto por
-[tests/test_prompt_injection_defense.py](tests/test_prompt_injection_defense.py).
-El tag fijo mantiene la caché estable, pero es predecible y no impide cierres falsificados.
-
-**Versionado real vía query param.** `POST /api/v1/estimate?prompt_version=v2` selecciona la
-variante `v2` (mismo contrato, mismas garantías de seguridad) sin tocar el resto del código; una
-versión desconocida devuelve `422` (`PromptVersionNotFoundError`). La respuesta siempre refleja
-la versión realmente usada en `prompt_version`.
-
----
 
 ## Sesion 5 — Sesiones y adjuntos PDF/Word (extracción local)
 
-Dos endpoints nuevos, con el estado de sesión en memoria del proceso (`app/sessions.py`,
+Tres endpoints nuevos, con el estado de sesión en memoria del proceso (`app/sessions.py`,
 sin BBDD ni Redis: se pierde al reiniciar el servicio):
 
 - `POST /sessions` → `201 {"session_id": "<uuid v4>"}`. El cliente envía ese id en las
   peticiones posteriores.
+- `GET /sessions/{session_id}` → `session_id`, `message_count`, `max_turns` y el
+  `project_metadata` actual (`404` si no existe). Sirve para depurar y para ver la memoria
+  separada del historial.
 - `POST /sessions/{session_id}/estimate` → `EstimationResponse`, igual que
   `/api/v1/estimate`. Acepta `multipart/form-data`:
 
@@ -303,8 +219,38 @@ falsificar un separador.
 | Más de `MAX_ATTACHMENTS` (5) ficheros | `422` |
 | Fichero corrupto, cifrado o sin texto extraíble | `422` |
 
-Cada fichero se trunca a `MAX_ATTACHMENT_CHARS` (30.000 caracteres) con un aviso explícito
+Cada fichero se trunca a `MAX_ATTACHMENT_CHARS` (60.000 caracteres) con un aviso explícito
 `[attachment truncated at N characters]` en el propio texto.
+
+**Motivo de los `502`.** Cuando falla la generación, ambos endpoints de estimación devuelven
+el mensaje genérico de siempre en `detail` y, además, un campo `reason` con un código fijo:
+
+```json
+{
+  "detail": "The LLM provider failed to generate the estimation.",
+  "reason": {
+    "code": "validation_failed",
+    "message": "phases sum (23226 EUR) does not match total_cost_eur (23588 EUR); adjust either the phases or the total"
+  }
+}
+```
+
+| `reason.code` | Cuándo | `message` |
+| --- | --- | --- |
+| `validation_failed` | La respuesta incumple el esquema (suma de costes, `Out of scope:`, límites) | Sí: solo el texto de nuestros validadores |
+| `incomplete_response` | JSON cortado o inválido | Sí, fijo |
+| `authentication_failed` | Clave inválida o sin acceso al modelo | No |
+| `rate_limited` | Cuota o límite de tokens | No |
+| `timeout` | Supera `LLM_TIMEOUT` | No |
+| `context_too_long` | Historial y adjuntos exceden el contexto | No |
+| `provider_unavailable` | Error de conexión o 5xx del proveedor | No |
+| `provider_error` | Otro error del proveedor | No |
+| `unexpected_error` | Cualquier otro fallo | No |
+
+Nunca se devuelve texto de excepciones del proveedor (puede incluir fragmentos de la clave o
+datos de la cuenta): solo el código y, para validación, el mensaje de nuestras reglas sin la
+salida del modelo. El detalle completo sigue en el log, en el evento `llm_estimation_failed`.
+Streamlit muestra el motivo junto al error. Tests: `tests/test_llm_errors.py`.
 
 **Por qué extracción local y no enviar los documentos sin procesar al LLM.**
 
@@ -354,185 +300,79 @@ alternativa, a cambio del acoplamiento a un proveedor.
   mensajes completa.
 - Si la estimación falla, ni el historial ni los metadatos se modifican.
 
+**Variables de entorno de sesiones** (también en `.env.example`):
+
+| Variable | Por defecto | Notas |
+| --- | --- | --- |
+| `MAX_CONVERSATION_TURNS` | `6` | Pares usuario+asistente que mantiene la ventana. El system prompt no ocupa hueco. |
+| `MAX_ATTACHMENT_CHARS` | `60000` | Corte por archivo extraído. Trunca, no rechaza. |
+| `METADATA_EXTRACTOR_MODEL` | `gpt-4o-mini` | Modelo de la segunda llamada por turno. |
+
+Lo que llega al LLM en el turno N es `[system] + últimos N pares (user, assistant) + nuevo user`.
+El system prompt se regenera en cada turno desde el `ProjectMetadata` actual
+(`ConversationHistory.to_messages_list(system_prompt)`), y al superar el tope se descartan
+los pares más antiguos en bloque para conservar la alternancia de roles.
+
 **Limitaciones conocidas.** El historial guarda cada mensaje de usuario completo, adjuntos
 incluidos, así que varios turnos con ficheros grandes pueden acercarse al límite de contexto
 del modelo. Las sesiones no están protegidas frente a peticiones concurrentes sobre el mismo
 `session_id`.
+
+**Cliente Streamlit** (`streamlit_app.py`, ya no usa `/api/v1/estimate`):
+
+- Al cargar la página crea una sesión con `POST /sessions` y guarda el `session_id` en
+  `st.session_state`; las recargas de la página del navegador crean una nueva.
+- El formulario tiene un campo de transcripción, un selector múltiple de ficheros (PDF o
+  Word) y las tres opciones de la estimación. Cada envío es un turno de la misma
+  conversación y, si va bien, limpia el formulario para el siguiente.
+- El panel lateral muestra el `session_id`, el tamaño del historial y el `project_metadata`
+  actual (leído con `GET /sessions/{id}`), para ver la memoria separada del historial.
+- El botón "Nueva conversación" llama de nuevo a `POST /sessions` y resetea el estado. Si el
+  servicio se reinicia y la sesión desaparece, el cliente lo indica y pide pulsarlo.
+
+**Tests de sesiones.** Cada uno equivale a un test del proyecto de referencia
+(`ai-engineering`) o cubre un hueco frente a él:
+
+| Tema | Test |
+| --- | --- |
+| Metadata entre turnos | `tests/test_sessions_integration.py::test_two_requests_in_one_session_update_the_project_metadata` |
+| | `tests/test_sessions_estimate_endpoint.py::test_metadata_accumulates_across_turns` |
+| | `tests/test_sessions.py::test_merge_overwrites_non_null_scalars_and_keeps_the_rest` |
+| | `tests/test_sessions.py::test_merge_unions_technologies_case_insensitively_keeping_order` |
+| | `tests/test_sessions.py::test_project_metadata_is_empty_only_without_any_fact` |
+| | `tests/test_sessions_contract.py::test_merge_replaces_agreed_scope_with_a_new_non_null_value` |
+| | `tests/test_sessions_contract.py::test_a_new_agreed_scope_replaces_the_previous_one_across_turns` |
+| Sesiones y 404 | `tests/test_sessions_endpoint.py::test_each_call_creates_a_new_session` |
+| | `tests/test_sessions_estimate_endpoint.py::test_unknown_session_is_404_and_does_not_call_the_llm` |
+| | `tests/test_sessions_contract.py::test_unknown_session_detail_is_session_not_found` |
+| Respuesta | `tests/test_sessions_contract.py::test_the_response_reports_the_prompt_version_and_that_it_is_not_cached` |
+| Adjuntos | `tests/test_sessions_estimate_endpoint.py::test_attachments_text_is_appended_to_the_transcript_before_the_prompt` |
+| | `tests/test_attachments.py::test_extracts_text_from_a_pdf` |
+| | `tests/test_attachments.py::test_extracts_paragraphs_and_table_cells_from_a_docx` |
+| | `tests/test_sessions_estimate_endpoint.py::test_unsupported_attachment_type_is_415` |
+| | `tests/test_sessions_estimate_endpoint.py::test_attachments_are_optional` |
+| | `tests/test_sessions_integration.py::test_a_pdf_attachment_changes_the_estimation` |
+| Ventana deslizante | `tests/test_sessions.py::test_window_drops_the_oldest_turns_beyond_max_turns` |
+| | `tests/test_sessions.py::test_window_never_exceeds_max_turns_over_many_turns` |
+| | `tests/test_sessions_estimate_endpoint.py::test_history_window_keeps_only_the_last_turns_and_the_system_prompt` |
+| | `tests/test_sessions_integration.py::test_eight_turns_never_send_more_history_than_the_configured_window` |
+| Llamadas al LLM | `tests/test_sessions_contract.py::test_each_turn_makes_one_estimation_call_and_one_metadata_extraction_call` |
+
+Para lanzarlos (incluye el resto de tests de esos ficheros):
+
+```bash
+uv run pytest tests/test_sessions.py tests/test_sessions_endpoint.py \
+  tests/test_sessions_estimate_endpoint.py tests/test_sessions_integration.py \
+  tests/test_sessions_contract.py tests/test_attachments.py -v
+```
 
 Las dependencias `pypdf`, `python-docx` y `python-multipart` son nuevas; hay que reconstruir
 la imagen: `docker compose up -d --build estimator streamlit`.
 
 ---
 
-## Arquitectura inicial
+## Arquitectura 
 
-El servicio sigue una **arquitectura por capas**: cada capa depende únicamente de la inmediatamente inferior, y toda petición atraviesa la misma secuencia HTTP → orquestación → infraestructura LLM → proveedor externo.
-
-```mermaid
-flowchart TD
-    Client["Cliente\n(Streamlit / demo SSE / curl)"]
-
-    subgraph API["Capa HTTP — app/main.py + app/routers/estimations.py"]
-        Health["GET /health"]
-        Estimate["POST /api/v1/estimate"]
-        Stream["POST /api/v1/estimate/stream (SSE)"]
-        ExcHandler["Exception handler:\nLLMConfigurationError → 503"]
-    end
-
-    subgraph Service["Capa de negocio — app/services/llm_service.py"]
-        Prompt["build_system_prompt()"]
-        Inject["frame_untrusted_input()\n(frontera anti-inyección)"]
-        Orchestrate["generate_estimation()\nextract_requirements()"]
-    end
-
-    Examples["app/context/examples.py\nCANONICAL_EXAMPLES (contexto CAG)"]
-
-    subgraph Wrapper["Capa de infraestructura LLM — app/services/llm_wrapper.py"]
-        LLMWrapperClass["LLMWrapper\n.complete() / .complete_stream()"]
-        Router["litellm.Router\n(primary + fallback)"]
-    end
-
-    subgraph CacheMod["app/services/cache.py"]
-        EstimationCache["EstimationCache\n(clave = prompt + knobs)"]
-    end
-
-    subgraph Config["Configuración — app/config.py + app/dependencies.py"]
-        Settings["Settings (.env)"]
-        Deps["get_llm_wrapper() / get_cache()"]
-    end
-
-    OpenAI(["OpenAI API"])
-    Anthropic(["Anthropic API"])
-    Redis[("Redis")]
-
-    Client --> Health
-    Client --> Estimate
-    Client --> Stream
-
-    Estimate --> Orchestrate
-    Stream --> LLMWrapperClass
-
-    Orchestrate --> Prompt
-    Orchestrate --> Inject
-    Orchestrate --> LLMWrapperClass
-    Prompt --> Examples
-
-    LLMWrapperClass --> Router
-    LLMWrapperClass --> EstimationCache
-    Router --> OpenAI
-    Router --> Anthropic
-    EstimationCache --> Redis
-
-    Deps --> LLMWrapperClass
-    Deps --> EstimationCache
-    Settings --> Deps
-    Settings --> ExcHandler
-```
-
-Notas sobre este diagrama:
-- El endpoint bloqueante (`/api/v1/estimate`) pasa por la capa de negocio completa (prompt, frontera anti-inyección, validación); el de streaming (`/api/v1/estimate/stream`) llama a `LLMWrapper` de forma más directa para poder emitir tokens según llegan.
-- `LLMWrapper` es la única pieza que conoce `litellm`; `llm_service.py` depende de esa clase concreta y no de una interfaz abstracta, por lo que **no** es una arquitectura hexagonal (puertos y adaptadores).
-- `EstimationCache` y `litellm.Router` son los dos únicos puntos que hablan con sistemas externos (Redis y los proveedores LLM, respectivamente).
-
----
-
-## Arquitectura final
-
-Tras la Sesion 4, conviven **dos flujos** sobre la misma capa de infraestructura LLM: el
-endpoint tipado (`/api/v1/estimate`, prompts en Jinja2 versionados) y el de streaming
-(`/api/v1/estimate/stream`, que conserva el flujo CAG original basado en transcripción). Sigue
-siendo una **arquitectura por capas** — ningún flujo salta capas ni conoce `litellm` fuera de
-`LLMWrapper` — pero ahora la construcción del prompt está desacoplada en su propio módulo
-versionado, con una frontera anti-inyección compartida entre ambos flujos.
-
-```mermaid
-flowchart TD
-    Client["Cliente\n(Streamlit form / curl / demo SSE)"]
-
-    subgraph API["Capa HTTP — app/main.py + app/routers/estimations.py"]
-        Health["GET /health"]
-        Estimate["POST /api/v1/estimate?prompt_version=\nEstimationRequest → EstimationResponse"]
-        Stream["POST /api/v1/estimate/stream (SSE)\nStreamEstimationRequest (transcripción)"]
-        ExcHandler["Exception handlers:\nLLMConfigurationError → 503\nPromptVersionNotFoundError → 422\nLLMServiceError → 502"]
-    end
-
-    subgraph Typed["Flujo tipado — app/services/llm_service.py"]
-        GenTyped["generate_typed_estimation()"]
-    end
-
-    subgraph PromptsMod["app/prompts/"]
-        Loader["loader.py\nrender_estimation_prompt(request, version)"]
-        V1["estimation/v1/*.j2\nsystem + user + examples"]
-        V2["estimation/v2/*.j2\ntono directo, examples propios"]
-    end
-
-    subgraph SecurityMod["app/services/security.py (compartido)"]
-        Tag["new_untrusted_data_tag()"]
-        Frame["frame_untrusted_input()"]
-        Instr["untrusted_data_instructions()"]
-    end
-
-    subgraph Legacy["Flujo streaming (CAG) — app/services/llm_service.py"]
-        BuildPrompt["build_system_prompt()"]
-        Examples["app/context/examples.py\nCANONICAL_EXAMPLES"]
-    end
-
-    subgraph Wrapper["app/services/llm_wrapper.py"]
-        LLMWrapperClass["LLMWrapper\n.complete() / .complete_stream()"]
-        Router["litellm.Router\n(primary + fallback)"]
-    end
-
-    subgraph CacheMod["app/services/cache.py"]
-        EstimationCache["EstimationCache\n(clave = prompt + knobs)"]
-    end
-
-    subgraph Config["app/config.py + app/dependencies.py"]
-        Settings["Settings (.env)"]
-        Deps["get_llm_wrapper() / get_cache()"]
-    end
-
-    OpenAI(["OpenAI API"])
-    Anthropic(["Anthropic API"])
-    Redis[("Redis")]
-
-    Client --> Health
-    Client --> Estimate
-    Client --> Stream
-
-    Estimate --> GenTyped
-    GenTyped --> Loader
-    Loader --> V1
-    Loader --> V2
-    Loader --> Tag
-    Loader --> Frame
-    Loader --> Instr
-    GenTyped --> LLMWrapperClass
-
-    Stream --> BuildPrompt
-    BuildPrompt --> Examples
-    BuildPrompt --> Frame
-    Stream --> LLMWrapperClass
-
-    LLMWrapperClass --> Router
-    LLMWrapperClass --> EstimationCache
-    Router --> OpenAI
-    Router --> Anthropic
-    EstimationCache --> Redis
-
-    Deps --> LLMWrapperClass
-    Deps --> EstimationCache
-    Settings --> Deps
-    Settings --> ExcHandler
-```
-
-Qué cambió respecto a la arquitectura inicial:
-- **Construcción del prompt desacoplada y versionada**: el flujo tipado ya no arma el prompt con f-strings en `llm_service.py`; `app/prompts/loader.py` renderiza plantillas Jinja2 bajo `estimation/<version>/`, seleccionables vía `?prompt_version=` sin tocar código.
-- **Frontera anti-inyección compartida**: `app/services/security.py` (antes vivía dentro de `llm_service.py`) la usan ambos flujos — el tipado envuelve `description` y cada `reference_projects[i].{name,summary}`; el de streaming sigue envolviendo la transcripción.
-- **Dos flujos, una sola infraestructura LLM**: ambos terminan en el mismo `LLMWrapper` (cache Redis, fallback de proveedor, coste) — no hay una segunda implementación de llamada al LLM.
-- **Docker Compose pasa de 2 a 3 servicios**: `estimator` + `redis` + `streamlit` (antes Streamlit corría solo fuera de Docker).
-- Sigue **sin ser hexagonal**: `llm_service.py` y `loader.py` dependen de clases concretas (`LLMWrapper`, `Environment` de Jinja2), no de interfaces/puertos.
-
----
 
 ## Resumen rápido: arrancar y testear
 
@@ -567,132 +407,79 @@ Toda la suite pasa en verde con este único comando (el mismo que ejecuta la CI 
 
 ## Arquitectura de la aplicación
 
+Hay dos flujos de entrada: el transaccional (`/api/v1/estimate`, con cachés) y el conversacional (`/sessions/{id}/estimate`, con adjuntos, historial y metadata, sin cachés). Ambos pasan por los guardrails de entrada y terminan en el mismo wrapper de LLM.
+
 ```mermaid
-flowchart TD
-    Client["Cliente Streamlit\nbadge Generating + contador\nbadges PROMPT vX / CACHED\nbotón Nueva estimación"]
-
-    subgraph API["Capa HTTP — app/routers/estimations.py"]
-        Estimate["POST /api/v1/estimate?prompt_version="]
-        ExcHandler["400 InputGuardrailViolation\n422 PromptVersionNotFoundError\n502 LLMServiceError\n503 LLMConfigurationError"]
+flowchart TB
+    subgraph clients["Clientes"]
+        ui["Streamlit<br/>streamlit_app.py"]
+        http["Swagger, curl o httpie"]
     end
 
-    subgraph ServiceL["app/services/llm_service.py::EstimationService"]
-        CheckInput["1. check_input()"]
-        SemLookup["2. semantic_cache.lookup()"]
-        GenTyped["3. generate_typed_estimation()"]
-        SemStore["4. semantic_cache.store()\n(si no vino de caché)"]
+    subgraph api["API FastAPI (app/)"]
+        r_est["routers/estimations.py<br/>POST /api/v1/estimate y SSE"]
+        r_ses["routers/sessions.py<br/>POST /sessions y /sessions/id/estimate"]
+        errmap["main.py<br/>Errores: 400, 404, 413, 415, 422, 502 con reason, 503"]
+        attach["attachments.py<br/>Texto de PDF y DOCX"]
+        store[("SessionStore<br/>historial y ProjectMetadata en memoria")]
     end
 
-    subgraph InputG["app/guardrails/input.py"]
-        Moderation["Moderación OpenAI"]
-        Injection["Prompt injection (regex)"]
-        PII["PII: email / IBAN / teléfono"]
+    subgraph svc["EstimationService (services/llm_service.py)"]
+        guard_in["guardrails/input.py<br/>Moderación, inyección y PII"]
+        prompts["prompts/loader.py<br/>Plantillas Jinja2 versionadas<br/>y contexto CAG"]
+        wrapper["services/llm_wrapper.py<br/>Instructor y reintentos de validación"]
+        guard_out["guardrails/output.py<br/>Política de fuera de alcance"]
+        meta["services/metadata_extractor.py<br/>Actualiza el ProjectMetadata"]
+        classify["services/llm_errors.py<br/>Código seguro del fallo"]
     end
 
-    subgraph PromptsMod["app/prompts/"]
-        Loader["loader.py\nrender_estimation_prompt(request, version)"]
-        Shared["_shared/output_schema.j2\nLOW_CONFIDENCE_THRESHOLD, OUT_OF_SCOPE_PREFIX"]
-        V1["v1 / v2\nsystem + user + examples"]
+    subgraph caches["Cachés (solo flujo transaccional)"]
+        exact[("Redis<br/>caché exacta SHA-256")]
+        semantic[("Redis Stack<br/>caché semántica")]
     end
 
-    subgraph Wrapper["app/services/llm_wrapper.py::LLMWrapper"]
-        Structured["complete_structured()\nInstructor Mode.JSON_SCHEMA / Mode.TOOLS"]
-        ExactCache["caché exacta (hash prompt+modelo)"]
+    subgraph llm["Proveedores LLM vía LiteLLM"]
+        primary["Modelo primario<br/>PRIMARY_MODEL"]
+        fallback["Modelo de respaldo<br/>FALLBACK_MODEL"]
+        emb["Embeddings y moderación<br/>OpenAI"]
     end
 
-    subgraph OutputG["app/guardrails/output.py"]
-        Enforce["enforce_scope_response()\nfiltro de último recurso"]
-    end
+    ui --> r_ses
+    ui --> r_est
+    http --> r_est
+    http --> r_ses
 
-    subgraph Render["EstimationResult validado"]
-        RenderText["render_structured_estimation()\nMarkdown local (text)"]
-    end
+    r_ses --> attach
+    r_ses <--> store
+    r_ses --> guard_in
+    r_est --> guard_in
 
-    subgraph SemCache["app/cache/semantic.py::EstimationSemanticCache"]
-        Bucket["bucket_for()\nprompt_version:project_type:detail_level:output_format"]
-        Vector["embedding + similitud coseno\n(threshold configurable)"]
-    end
+    guard_in --> emb
+    guard_in --> prompts
+    guard_in -. "flujo transaccional" .-> semantic
+    semantic --> emb
+    prompts --> wrapper
+    wrapper <--> exact
+    wrapper --> primary
+    wrapper -. "streaming y respaldo" .-> fallback
+    wrapper --> guard_out
+    guard_out --> r_est
+    guard_out --> meta
+    meta --> primary
+    meta --> store
+    guard_out --> r_ses
 
-    subgraph Deps["app/dependencies.py"]
-        GetOpenAI["get_openai_client()"]
-        GetSemantic["get_semantic_cache()"]
-        GetWrapper["get_llm_wrapper()"]
-    end
-
-    OpenAI(["OpenAI API\nmoderación + embeddings + completions"])
-    Anthropic(["Anthropic API"])
-    RedisStack[("Redis Stack\nRediSearch")]
-
-    Client --> Estimate
-    Estimate --> CheckInput
-    CheckInput --> Moderation --> Injection --> PII
-    CheckInput -. infracción .-> ExcHandler
-
-    CheckInput --> SemLookup
-    SemLookup --> Bucket
-    SemLookup --> Vector
-    SemLookup -. hit .-> Client
-
-    SemLookup --> GenTyped
-    GenTyped --> Loader --> Shared
-    Loader --> V1
-    GenTyped --> Structured
-    Structured --> ExactCache
-    Structured --> Enforce
-    Enforce --> RenderText
-    RenderText --> SemStore
-    SemStore --> Vector
-
-    GetOpenAI --> Moderation
-    GetOpenAI --> Vector
-    GetSemantic --> SemLookup
-    GetWrapper --> Structured
-
-    Structured --> OpenAI
-    Structured --> Anthropic
-    Moderation --> OpenAI
-    ExactCache --> RedisStack
-    Vector --> RedisStack
-
-    SemStore --> Client
+    wrapper -. "fallo" .-> classify
+    classify --> errmap
+    errmap --> clients
 ```
 
-### Qué se incorporó en esta sesión
+Resumen de cada flujo:
 
-- **Datos estructurados y validación (`app/schemas/estimation.py`)**: nuevos modelos
-  `Phase` y `EstimationResult`, con dos `@model_validator`: la suma de costes de las
-  fases debe coincidir exactamente con `total_cost_eur`, y toda respuesta con
-  `confidence_pct < 30` debe empezar por `"Out of scope:"`.
-- **Instructor + LiteLLM (`app/services/llm_wrapper.py::complete_structured()`)**:
-  genera y valida el JSON estructurado, seleccionando `Mode.JSON_SCHEMA` para OpenAI
-  y `Mode.TOOLS` para Anthropic, con hasta 6 reintentos automáticos ante violaciones
-  del esquema. Requirió fijar `openai>=2,<3` e `instructor>=1.16,<2` por
-  incompatibilidad de versiones.
-- **Endpoint y dependencias**: `EstimationService` se inyecta vía
-  `Depends(get_estimation_service)`; el router solo traduce errores a HTTP
-  (`400/422/502/503`), sin lógica de negocio ni fugas de detalles internos.
-- **Robustez de scope en tres capas**: instrucciones explícitas en
-  `app/prompts/estimation/_shared/output_schema.j2` (compartidas por `v1` y `v2`,
-  parametrizadas con las constantes reales del esquema para que nunca diverjan del
-  validador) + el `@model_validator` + `app/guardrails/output.py::enforce_scope_response()`
-  como red de seguridad final que nunca lanza excepción.
-- **Guardrails de entrada (`app/guardrails/input.py`)**: moderación (OpenAI
-  Moderation API, se omite sin clave y falla abierto ante error de red), detección de
-  prompt injection y de PII (email, IBAN, teléfono), ejecutados antes de cualquier
-  caché o llamada al LLM. Una infracción devuelve `400` con `{reason, message}`.
-- **Caché semántica (`app/cache/semantic.py`, `redisvl`)**: clave compuesta por un
-  *bucket* determinista (`prompt_version:project_type:detail_level:output_format`) y
-  una parte vectorial (embedding de la descripción + similitud coseno, umbral
-  configurable). Se consulta tras los guardrails de entrada y solo se escribe con el
-  resultado ya filtrado por `enforce_scope_response()`. Requirió migrar el servicio
-  `redis` de `docker-compose.yml` a `redis/redis-stack:7.4.0-v0` (RediSearch) y
-  aislar las pruebas de ese estado compartido mediante un fixture `autouse` en
-  `tests/conftest.py`.
-- **Streamlit (`streamlit_app.py`)**: indicador "Generating..." con contador de
-  segundos en vivo mientras dura la llamada (hilo en segundo plano, ya que Streamlit
-  no refresca durante una llamada bloqueante); badges `PROMPT vX` y `CACHED` sobre el
-  resultado; botón "Nueva estimación" que limpia el formulario mediante claves de
-  widget versionadas (`form_version`), más fiable que borrar entradas sueltas de
-  `session_state` dentro de un `st.form`.
+1. **Transaccional.** Router, guardrails de entrada, caché semántica, plantilla de prompt, wrapper (caché exacta, llamada con Instructor y validadores), guardrails de salida y guardado en ambas cachés.
+2. **Conversacional.** Router, extracción de adjuntos, guardrails de entrada sobre el texto completo, prompt con el `<project_metadata>`, llamada con historial en ventana, guardrails de salida, y actualización de historial y metadata con una segunda llamada al LLM. Si la estimación falla no se modifica nada de la sesión.
+3. **Errores.** Cualquier fallo del proveedor se clasifica en `reason.code` y se devuelve como `502`; los fallos de configuración, como `503`.
+
+
 
 

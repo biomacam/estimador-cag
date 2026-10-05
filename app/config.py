@@ -1,7 +1,10 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.sessions import MAX_TURNS
 
 
 class Settings(BaseSettings):
@@ -37,11 +40,11 @@ class Settings(BaseSettings):
     MAX_ATTACHMENTS: int = 5
     MAX_ATTACHMENT_BYTES: int = 10 * 1024 * 1024
     # Per file, after extraction: bounds the tokens a single upload can add to the prompt.
-    MAX_ATTACHMENT_CHARS: int = 30_000
+    MAX_ATTACHMENT_CHARS: int = 60_000
 
     # --- Conversational sessions ---
     # user+assistant pairs kept in each session's history window.
-    MAX_CONVERSATION_TURNS: int = 6
+    MAX_CONVERSATION_TURNS: int = Field(default=MAX_TURNS, ge=1)
     # Cheap model for the per-turn ProjectMetadata extraction (needs OPENAI_API_KEY).
     METADATA_EXTRACTOR_MODEL: str = "gpt-4o-mini"
 

@@ -252,6 +252,23 @@ def test_oversized_attachment_is_413(
     assert llm_calls == []
 
 
+def test_long_attachment_is_truncated_not_rejected(
+    client: TestClient, session_id: str, llm_calls: list, extracted: list
+) -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, MAX_ATTACHMENT_CHARS=100)
+    try:
+        docx = make_docx(["x" * 500])
+        response = _post(client, session_id, [("attachments", ("big.docx", docx, "application/octet-stream"))])
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    prompt_input = _user_input(llm_calls[0])
+    assert "x" * 100 in prompt_input
+    assert "x" * 101 not in prompt_input
+    assert "[attachment truncated at 100 characters]" in prompt_input
+
+
 def test_too_many_attachments_is_422(
     client: TestClient, session_id: str, llm_calls: list, extracted: list
 ) -> None:

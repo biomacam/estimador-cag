@@ -19,6 +19,7 @@ from app.schemas.estimation import (
     StreamEstimationRequest,
 )
 from app.services.evaluation import extract_declared_total_cost
+from app.services.llm_errors import UNEXPECTED_ERROR
 from app.services.llm_service import (
     LLM_PROVIDER_ERROR_MESSAGE,
     LLMServiceError,
@@ -40,7 +41,7 @@ router = APIRouter(prefix="/api/v1", tags=["estimations"])
     responses={
         400: {"description": "Rejected by an input guardrail (moderation, prompt injection or PII)"},
         422: {"description": "Invalid request or unknown prompt version"},
-        502: {"description": "LLM generation or structured validation failed"},
+        502: {"description": "LLM generation failed; the body adds reason.code (and a safe reason.message)"},
         503: {"description": "No LLM provider credentials configured"},
     },
 )
@@ -68,14 +69,13 @@ def create_estimation(
         ) from exc
     except PromptVersionNotFoundError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except LLMServiceError as exc:
-        log.error("estimation_endpoint_error", error_type=type(exc).__name__)
-        raise HTTPException(status_code=502, detail=LLM_PROVIDER_ERROR_MESSAGE) from exc
+    except LLMServiceError:
+        raise
     except LLMConfigurationError:
         raise
     except Exception as exc:
         log.error("estimation_endpoint_error", error_type=type(exc).__name__)
-        raise HTTPException(status_code=502, detail=LLM_PROVIDER_ERROR_MESSAGE) from exc
+        raise LLMServiceError(LLM_PROVIDER_ERROR_MESSAGE, reason=UNEXPECTED_ERROR) from exc
 
 
 @router.post("/estimate/stream")

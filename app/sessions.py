@@ -16,6 +16,9 @@ from pydantic import BaseModel, Field
 
 Role = Literal["user", "assistant"]
 
+# Default window size; a turn is one user message plus its assistant reply.
+MAX_TURNS = 6
+
 
 class SessionNotFoundError(KeyError):
     """Raised when a ``session_id`` is not in the store."""
@@ -30,11 +33,12 @@ class ConversationHistory(BaseModel):
     """Sliding window over the last ``max_turns`` turns of a conversation.
 
     A turn starts at each user message and includes the assistant reply that
-    follows it. The system prompt is kept apart from ``messages``, so trimming
-    can never discard it; it is always emitted first by ``to_messages``.
+    follows it. The system prompt is kept apart from ``messages``, so it never
+    takes a slot and trimming can never discard it. When the window overflows,
+    whole oldest turns are dropped so roles keep alternating.
     """
 
-    max_turns: int = Field(default=6, ge=1)
+    max_turns: int = Field(default=MAX_TURNS, ge=1)
     system_prompt: str | None = None
     messages: list[Message] = Field(default_factory=list)
 
@@ -42,8 +46,14 @@ class ConversationHistory(BaseModel):
         self.messages.append(Message(role=role, content=content))
         self._trim()
 
-    def to_messages(self) -> list[dict[str, str]]:
-        """Return the LLM-ready messages: system prompt first, then the window."""
+    def to_messages_list(self, system_prompt: str | None = None) -> list[dict[str, str]]:
+        """Return the LLM-ready messages: system prompt first, then the window.
+
+        Pass ``system_prompt`` rendered from the current ``ProjectMetadata``; it replaces
+        the previous one and is remembered, so the history always has one.
+        """
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
         window = [{"role": m.role, "content": m.content} for m in self.messages]
         if self.system_prompt is None:
             return window
@@ -102,7 +112,7 @@ class Session(BaseModel):
 class SessionStore:
     """``session_id`` -> ``Session`` dict held in process memory (see module docstring)."""
 
-    def __init__(self, *, max_turns: int = 6) -> None:
+    def __init__(self, *, max_turns: int = MAX_TURNS) -> None:
         self._sessions: dict[str, Session] = {}
         self._max_turns = max_turns
 

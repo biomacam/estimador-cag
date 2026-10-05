@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
 from app.routers import estimations, sessions
+from app.services.llm_service import LLM_PROVIDER_ERROR_MESSAGE, LLMServiceError
 from app.services.llm_wrapper import LLMConfigurationError
 
 
@@ -67,6 +68,16 @@ async def llm_configuration_error_handler(
     """Translate a missing API key into a 503, whether raised in a route body or
     while resolving the ``get_llm_wrapper`` dependency (streaming endpoint)."""
     return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(LLMServiceError)
+async def llm_service_error_handler(request: Request, exc: LLMServiceError) -> JSONResponse:
+    """The message stays generic; ``reason`` carries only a fixed code and, for validation
+    failures, our own validator text (never provider exception text)."""
+    return JSONResponse(
+        status_code=502,
+        content={"detail": LLM_PROVIDER_ERROR_MESSAGE, "reason": exc.reason.as_dict()},
+    )
 
 
 # Serves the static SSE demo page from app/static/, if present.

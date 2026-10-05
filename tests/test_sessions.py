@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.sessions import (
+    MAX_TURNS,
     ConversationHistory,
     ProjectMetadata,
     SessionNotFoundError,
@@ -47,16 +48,38 @@ def test_system_prompt_is_always_first_and_survives_trimming() -> None:
 
     _add_turns(history, 5)
 
-    messages = history.to_messages()
+    messages = history.to_messages_list()
     assert messages[0] == {"role": "system", "content": "You are an estimator."}
     assert [m["content"] for m in messages[1:]] == ["u5", "a5"]
 
 
-def test_to_messages_has_no_system_entry_when_prompt_is_unset() -> None:
+def test_to_messages_list_regenerates_the_system_prompt_without_using_a_slot() -> None:
+    history = ConversationHistory(max_turns=1, system_prompt="old prompt")
+    _add_turns(history, 1)
+
+    messages = history.to_messages_list("fresh prompt from the current metadata")
+
+    assert messages[0] == {"role": "system", "content": "fresh prompt from the current metadata"}
+    assert [m["role"] for m in messages] == ["system", "user", "assistant"]
+    assert history.to_messages_list()[0]["content"] == "fresh prompt from the current metadata"
+
+
+def test_default_window_is_six_turns() -> None:
+    history = ConversationHistory()
+
+    _add_turns(history, MAX_TURNS + 3)
+
+    assert MAX_TURNS == 6
+    assert history.max_turns == MAX_TURNS
+    assert len(history.messages) == 2 * MAX_TURNS
+    assert history.messages[0].content == "u4"
+
+
+def test_to_messages_list_has_no_system_entry_when_prompt_is_unset() -> None:
     history = ConversationHistory()
     history.add("user", "hello")
 
-    assert history.to_messages() == [{"role": "user", "content": "hello"}]
+    assert history.to_messages_list() == [{"role": "user", "content": "hello"}]
 
 
 def test_max_turns_must_be_positive() -> None:
