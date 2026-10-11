@@ -19,6 +19,8 @@ Role = Literal["user", "assistant"]
 # Default window size; a turn is one user message plus its assistant reply.
 MAX_TURNS = 6
 
+SUMMARY_PREFIX = "[Earlier conversation summary — the recent turns below are the live thread]\n"
+
 
 class SessionNotFoundError(KeyError):
     """Raised when a ``session_id`` is not in the store."""
@@ -30,40 +32,43 @@ class Message(BaseModel):
 
 
 class ConversationHistory(BaseModel):
-    """Sliding window over the last ``max_turns`` turns of a conversation.
+    """Sliding window of recent turns, augmented with a cumulative summary and anchors.
 
-    A turn starts at each user message and includes the assistant reply that
-    follows it. The system prompt is kept apart from ``messages``, so it never
-    takes a slot and trimming can never discard it. When the window overflows,
-    whole oldest turns are dropped so roles keep alternating.
+    - ``messages``: the recent window (last ``max_turns`` turns once compressed).
+    - ``anchors``: turns flagged as durable commitments (NDA, frozen scope, ...);
+      kept verbatim and never evicted.
+    - ``summary``: running summary of older non-anchor turns already evicted.
+
+    ``add`` only appends: trimming, anchor promotion and summarisation are the job of
+    ``app.sessions.compression.CompressionPolicy``. The system prompt is kept apart,
+    so it never takes a slot and can never be evicted.
     """
 
     max_turns: int = Field(default=MAX_TURNS, ge=1)
     system_prompt: str | None = None
     messages: list[Message] = Field(default_factory=list)
+    anchors: list[Message] = Field(default_factory=list)
+    summary: str | None = None
 
     def add(self, role: Role, content: str) -> None:
         self.messages.append(Message(role=role, content=content))
-        self._trim()
 
     def to_messages_list(self, system_prompt: str | None = None) -> list[dict[str, str]]:
-        """Return the LLM-ready messages: system prompt first, then the window.
+        """LLM-ready messages: ``[system?] + [summary?] + anchors + recent window``.
 
         Pass ``system_prompt`` rendered from the current ``ProjectMetadata``; it replaces
         the previous one and is remembered, so the history always has one.
         """
         if system_prompt is not None:
             self.system_prompt = system_prompt
-        window = [{"role": m.role, "content": m.content} for m in self.messages]
-        if self.system_prompt is None:
-            return window
-        return [{"role": "system", "content": self.system_prompt}, *window]
-
-    def _trim(self) -> None:
-        while sum(m.role == "user" for m in self.messages) > self.max_turns:
-            del self.messages[0]
-            while self.messages and self.messages[0].role != "user":
-                del self.messages[0]
+        out: list[dict[str, str]] = []
+        if self.system_prompt is not None:
+            out.append({"role": "system", "content": self.system_prompt})
+        if self.summary:
+            out.append({"role": "user", "content": SUMMARY_PREFIX + self.summary})
+        out.extend({"role": m.role, "content": m.content} for m in self.anchors)
+        out.extend({"role": m.role, "content": m.content} for m in self.messages)
+        return out
 
 
 class ProjectMetadata(BaseModel):
@@ -107,6 +112,9 @@ class Session(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid4()))
     history: ConversationHistory = Field(default_factory=ConversationHistory)
     metadata: ProjectMetadata = Field(default_factory=ProjectMetadata)
+    # Cached from the last successful turn so GET /sessions/{id} need not re-run the resolver.
+    last_resolved_tier: str | None = None
+    last_tier_rule: str | None = None
 
 
 class SessionStore:

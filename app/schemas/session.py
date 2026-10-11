@@ -13,4 +13,8 @@ class SessionInfoResponse(BaseModel):
     session_id: str
     message_count: int = Field(description="Messages currently inside the sliding window")
     max_turns: int
+    anchors_count: int = Field(description="Anchor messages kept verbatim outside the window")
+    summary_chars: int = Field(description="Length of the cumulative summary of evicted turns")
+    last_resolved_tier: str | None = Field(description="Audience tier used in the last successful turn")
+    last_tier_rule: str | None = Field(description="Rule that decided that tier (or explicit_override)")
     metadata: ProjectMetadata

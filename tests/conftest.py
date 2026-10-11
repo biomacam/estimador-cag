@@ -18,6 +18,22 @@ def _disable_semantic_cache_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.dependencies.get_semantic_cache", lambda: None)
 
 
+class _OfflineCompressionLlm:
+    def complete_structured_chat(self, **kwargs):
+        raise RuntimeError("no LLM in tests")
+
+
+@pytest.fixture(autouse=True)
+def _offline_history_compression(monkeypatch: pytest.MonkeyPatch) -> None:
+    """History compression must never reach a real provider from tests: the summarizer
+    swallows this error, so the window is still trimmed but no summary is built."""
+    monkeypatch.setattr(
+        "app.services.llm_service._compression_llm", lambda: _OfflineCompressionLlm()
+    )
+    # Same for the ACB Critic: on error it degrades to "accept with zero confidence".
+    monkeypatch.setattr("app.services.llm_service._critic_llm", lambda: _OfflineCompressionLlm())
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     """Provide a FastAPI test client with the lifespan actually running.

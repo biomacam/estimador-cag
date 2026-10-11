@@ -48,6 +48,18 @@ class Settings(BaseSettings):
     # Cheap model for the per-turn ProjectMetadata extraction (needs OPENAI_API_KEY).
     METADATA_EXTRACTOR_MODEL: str = "gpt-4o-mini"
 
+    # --- History compression (cumulative summary + anchors) ---
+    # "heuristic" (regex, no LLM call) or "llm" (one classifier call per evicted turn).
+    ANCHOR_DETECTION_MODE: Literal["heuristic", "llm"] = "heuristic"
+    # Cheap model for the cumulative summarizer and the LLM anchor classifier.
+    COMPRESSION_MODEL: str = "gpt-4o-mini"
+
+    # --- Actor-Critic-Boss ---
+    # Read-only auditor of each draft; a cheap model is enough.
+    CRITIC_MODEL: str = "gpt-4o-mini"
+    # Each iteration = 1 actor + 1 critic call. Three = initial draft + two directed retries.
+    BOSS_MAX_ITERATIONS: int = Field(default=3, ge=1, le=5)
+
     @property
     def is_llm_configured(self) -> bool:
         """True when at least one provider API key is set.

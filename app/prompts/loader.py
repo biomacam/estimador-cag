@@ -11,6 +11,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
+from app.schemas.critic import CriticFeedback
 from app.schemas.estimation import (
     OUT_OF_SCOPE_PREFIX,
     LOW_CONFIDENCE_THRESHOLD,
@@ -23,7 +24,8 @@ from app.services.security import (
     new_untrusted_data_tag,
     untrusted_data_instructions,
 )
-from app.sessions import ProjectMetadata
+from app.sessions import Message, ProjectMetadata
+from app.sessions.tier_resolver import Tier
 
 PROMPTS_DIR = Path(__file__).parent
 
@@ -58,6 +60,8 @@ def render_estimation_prompt(
         output_format=request.output_format.value,
         reference_projects=request.reference_projects,
         metadata=None,
+        tier=None,
+        critic_feedback=None,
         version=version,
     )
 
@@ -69,12 +73,16 @@ def render_conversational_prompt(
     project_type: str,
     detail_level: str,
     output_format: str,
+    tier: Tier | None = None,
+    critic_feedback: CriticFeedback | None = None,
     version: str = "v1",
 ) -> tuple[str, str]:
     """(system, user) for a session turn: ``transcript`` already includes attachment text.
 
     Not bound by ``EstimationRequest.description``'s 2000-character limit. The system
-    prompt carries the session's ``ProjectMetadata``; the history is added by the caller.
+    prompt carries the session's ``ProjectMetadata`` and the ``<audience>`` block for
+    ``tier`` (``DEFAULT`` when omitted); the history is added by the caller. With
+    ``critic_feedback`` (Actor-Critic-Boss retries) the user message lists the issues to fix.
     """
     return _render(
         description=transcript,
@@ -83,6 +91,8 @@ def render_conversational_prompt(
         output_format=output_format,
         reference_projects=None,
         metadata=metadata,
+        tier=tier or Tier.DEFAULT,
+        critic_feedback=critic_feedback,
         version=version,
     )
 
@@ -107,6 +117,53 @@ def render_metadata_extraction_prompt(
     try:
         system = _env.get_template(f"metadata_extraction/{version}/system.j2").render(context)
         user = _env.get_template(f"metadata_extraction/{version}/user.j2").render(context)
+    except TemplateNotFound as exc:
+        raise PromptVersionNotFoundError(f"Unknown prompt version: {version!r}") from exc
+    return system, user
+
+
+def render_conversation_summary_prompt(
+    *, previous_summary: str | None, evicted: list[Message], version: str = "v1"
+) -> tuple[str, str]:
+    """(system, user) for the ``CumulativeSummarizer``; evicted user turns are already framed."""
+    tag = new_untrusted_data_tag()
+    context = {
+        "previous_summary": previous_summary or "",
+        "evicted": evicted,
+        "untrusted_data_instructions": untrusted_data_instructions(
+            tag, data_description="user-supplied data (earlier conversation turns)"
+        ),
+    }
+    try:
+        system = _env.get_template(f"conversation_summary/{version}/system.j2").render(context)
+        user = _env.get_template(f"conversation_summary/{version}/user.j2").render(context)
+    except TemplateNotFound as exc:
+        raise PromptVersionNotFoundError(f"Unknown prompt version: {version!r}") from exc
+    return system, user
+
+
+def render_critic_prompt(
+    *,
+    transcript: str,
+    metadata: ProjectMetadata,
+    tier: Tier,
+    result: EstimationResult,
+    version: str = "v1",
+) -> tuple[str, str]:
+    """(system, user) for the Actor-Critic-Boss Critic that audits ``result``."""
+    tag = new_untrusted_data_tag()
+    context = {
+        "framed_transcript": frame_untrusted_input(transcript, tag),
+        "untrusted_data_instructions": untrusted_data_instructions(
+            tag, data_description="user-supplied data (the conversation transcript and project facts)"
+        ),
+        "framed_metadata": _frame_metadata(metadata, tag),
+        "tier": tier.value,
+        "result": result,
+    }
+    try:
+        system = _env.get_template(f"critic/{version}/system.j2").render(context)
+        user = _env.get_template(f"critic/{version}/user.j2").render(context)
     except TemplateNotFound as exc:
         raise PromptVersionNotFoundError(f"Unknown prompt version: {version!r}") from exc
     return system, user
@@ -142,6 +199,8 @@ def _render(
     output_format: str,
     reference_projects: list[ReferenceProject] | None,
     metadata: ProjectMetadata | None,
+    tier: Tier | None,
+    critic_feedback: CriticFeedback | None,
     version: str,
 ) -> tuple[str, str]:
     tag = new_untrusted_data_tag()
@@ -169,6 +228,8 @@ def _render(
         "reference_projects": framed_reference_projects,
         "conversational": metadata is not None,
         "framed_metadata": _frame_metadata(metadata, tag),
+        "tier": tier.value if tier else None,
+        "critic_feedback": critic_feedback,
         # Sourced from the schema so the prompt can never drift from what the
         # EstimationResult model_validators actually enforce.
         "low_confidence_threshold": LOW_CONFIDENCE_THRESHOLD,
