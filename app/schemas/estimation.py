@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 import litellm
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
+from app.schemas.acb import BossTrace
+
 PreprocessingMode = Literal["none", "inline_cleaning", "two_phase"]
 ExampleFormat = Literal["markdown", "json", "narrative"]
 MAX_TRANSCRIPTION_TOKENS = 50_000
@@ -159,6 +161,12 @@ class EstimationResponse(BaseModel):
     prompt_version: str
     result: EstimationResult
     cached: bool = False
+
+
+class ACBResponse(EstimationResponse):
+    """``EstimationResponse`` plus the Actor-Critic-Boss audit trail."""
+
+    acb: BossTrace
 
 
 class StreamEstimationRequest(BaseModel):

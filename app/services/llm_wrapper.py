@@ -172,22 +172,14 @@ class LLMWrapper:
         cache_key = f"structured:{cache_digest}"
         cached = self.cache.get(cache_key)
         if cached is not None:
+            # A replay spends nothing, whatever the original call cost.
             return response_model.model_validate(cached["result"]), {
-                **cached["meta"], "cache_hit": True,
+                **cached["meta"], "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "cache_hit": True,
             }
 
-        client = instructor.from_litellm(litellm.completion, mode=mode)
-        log.info(
-            "llm_structured_call_started",
-            model=target_model,
-            response_model=response_model.__name__,
-            mode=mode.value,
-        )
-        started = time.perf_counter()
-        result = client.chat.completions.create(
-            model=target_model,
-            api_key=self._api_key_for(target_model),
-            timeout=self.timeout,
+        validated, meta = self._structured_call(
+            target_model=target_model,
+            mode=mode,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
@@ -195,15 +187,9 @@ class LLMWrapper:
             response_model=response_model,
             max_tokens=max_tokens,
             max_retries=max_retries,
+            event="llm_structured_call",
         )
-        validated = response_model.model_validate(result.model_dump())
-        meta = {
-            "model": _normalise_model_name(target_model),
-            "provider": provider,
-            "latency_ms": int((time.perf_counter() - started) * 1000),
-        }
         self.cache.set(cache_key, {"result": validated.model_dump(mode="json"), "meta": meta})
-        log.info("llm_structured_call_completed", **meta)
         return validated, {**meta, "cache_hit": False}
 
     def complete_structured_chat(
@@ -222,16 +208,40 @@ class LLMWrapper:
         target_model = model_override or self.primary_model
         provider = _provider_from_model(target_model)
         mode = instructor.Mode.TOOLS if provider == "anthropic" else instructor.Mode.JSON_SCHEMA
+        validated, meta = self._structured_call(
+            target_model=target_model,
+            mode=mode,
+            messages=messages,
+            response_model=response_model,
+            max_tokens=max_tokens,
+            max_retries=max_retries,
+            event="llm_structured_chat",
+        )
+        return validated, {**meta, "cache_hit": False}
+
+    def _structured_call(
+        self,
+        *,
+        target_model: str,
+        mode: instructor.Mode,
+        messages: list[dict[str, str]],
+        response_model: type[StructuredResult],
+        max_tokens: int,
+        max_retries: int,
+        event: str,
+    ) -> tuple[StructuredResult, dict[str, Any]]:
+        """Instructor call returning the validated model plus model, provider, latency, tokens
+        and cost. Instructor folds the usage of its re-prompts into the returned completion."""
         client = instructor.from_litellm(litellm.completion, mode=mode)
         log.info(
-            "llm_structured_chat_started",
+            f"{event}_started",
             model=target_model,
             response_model=response_model.__name__,
             mode=mode.value,
             messages=len(messages),
         )
         started = time.perf_counter()
-        result = client.chat.completions.create(
+        result, completion = client.chat.completions.create_with_completion(
             model=target_model,
             api_key=self._api_key_for(target_model),
             timeout=self.timeout,
@@ -241,13 +251,20 @@ class LLMWrapper:
             max_retries=max_retries,
         )
         validated = response_model.model_validate(result.model_dump())
+        usage = getattr(completion, "usage", None)
+        tokens_in = getattr(usage, "prompt_tokens", 0) or 0
+        tokens_out = getattr(usage, "completion_tokens", 0) or 0
+        model = _normalise_model_name(target_model)
         meta = {
-            "model": _normalise_model_name(target_model),
-            "provider": provider,
+            "model": model,
+            "provider": _provider_from_model(target_model),
             "latency_ms": int((time.perf_counter() - started) * 1000),
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost_usd": _estimate_cost(model, tokens_in, tokens_out),
         }
-        log.info("llm_structured_chat_completed", **meta)
-        return validated, {**meta, "cache_hit": False}
+        log.info(f"{event}_completed", response_model=response_model.__name__, **meta)
+        return validated, meta
 
     def complete(
         self,

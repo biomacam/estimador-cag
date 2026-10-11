@@ -159,6 +159,74 @@ def test_history_window_keeps_only_the_last_turns_and_the_system_prompt(
     assert history.system_prompt
 
 
+def test_tier_is_derived_from_the_transcript_and_exposed_in_session_info(
+    client: TestClient, session_id: str, llm_calls: list, extracted: list
+) -> None:
+    response = client.post(
+        f"/sessions/{session_id}/estimate",
+        data={"transcript": "Heads-up: we signed an NDA, now we need a customer portal."},
+    )
+
+    assert response.status_code == 200
+    assert "tier for this turn is executive" in llm_calls[0][0]["content"]
+    info = client.get(f"/sessions/{session_id}").json()
+    assert (info["last_resolved_tier"], info["last_tier_rule"]) == ("executive", "nda_detected")
+
+
+def test_tier_form_field_overrides_the_derived_tier(
+    client: TestClient, session_id: str, llm_calls: list, extracted: list
+) -> None:
+    response = client.post(
+        f"/sessions/{session_id}/estimate",
+        data={"transcript": "Heads-up: we signed an NDA, now we need a customer portal.", "tier": "pm"},
+    )
+
+    assert response.status_code == 200
+    assert "tier for this turn is pm" in llm_calls[0][0]["content"]
+    info = client.get(f"/sessions/{session_id}").json()
+    assert (info["last_resolved_tier"], info["last_tier_rule"]) == ("pm", "explicit_override")
+
+
+def test_unknown_tier_is_rejected_with_422(
+    client: TestClient, session_id: str, llm_calls: list, extracted: list
+) -> None:
+    response = client.post(
+        f"/sessions/{session_id}/estimate", data={"transcript": TRANSCRIPT, "tier": "ceo"}
+    )
+
+    assert response.status_code == 422
+    assert llm_calls == []
+
+
+def test_evicted_turns_reach_the_llm_as_summary_and_anchors(
+    client: TestClient, store: SessionStore, session_id: str, llm_calls: list, extracted: list,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.sessions.compression.summarizer import _SummaryEnvelope
+
+    class SummaryLlm:
+        def complete_structured_chat(self, **kwargs):
+            return _SummaryEnvelope(summary="Customer portal with invoices."), {}
+
+    monkeypatch.setattr(llm_service, "_compression_llm", lambda: SummaryLlm())
+    client.post(
+        f"/sessions/{session_id}/estimate",
+        data={"transcript": "We signed the NDA and need a customer portal with invoices."},
+    )
+    for _ in range(3):
+        assert _post(client, session_id).status_code == 200
+    _post(client, session_id)
+
+    last = llm_calls[-1]
+    assert [m["role"] for m in last] == [
+        "system", "user", "user", "assistant", "user", "assistant", "user", "assistant", "user",
+    ]
+    assert last[1]["content"].endswith("Customer portal with invoices.")
+    assert "We signed the NDA" in last[2]["content"]
+    info = client.get(f"/sessions/{session_id}").json()
+    assert info["anchors_count"] == 2
+    assert info["summary_chars"] == len("Customer portal with invoices.")
+
 def test_sessions_do_not_share_history_or_metadata(
     client: TestClient, store: SessionStore, session_id: str, llm_calls: list, extracted: list
 ) -> None:

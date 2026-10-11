@@ -19,15 +19,20 @@ from pydantic import ValidationError
 if TYPE_CHECKING:
     from app.cache.semantic import EstimationSemanticCache
 
+from app.config import get_settings
 from app.context.examples import format_examples_for_prompt, select_examples
 from app.dependencies import get_llm_wrapper
 from app.guardrails.input import check_input
 from app.guardrails.output import enforce_scope_response
 from app.prompts.loader import render_conversational_prompt, render_estimation_prompt
+from app.schemas.critic import CriticFeedback
 from app.schemas.estimation import (
+    ACBResponse,
     DetailLevel, EstimationRequest, EstimationResponse, EstimationResult, ExampleFormat, OutputFormat,
     PreprocessingMode, ProjectType,
 )
+from app.services.boss import Boss
+from app.services.critic import Critic
 from app.services.evaluation import OK_FINISH_REASONS
 from app.services.llm_errors import PROVIDER_ERROR, LLMFailureReason, classify_llm_error
 from app.services.llm_wrapper import LLMTruncatedResponseError
@@ -37,7 +42,9 @@ from app.services.security import (
     new_untrusted_data_tag,
     untrusted_data_instructions,
 )
-from app.sessions import Session
+from app.sessions import ConversationHistory, Session
+from app.sessions.compression import apply_compression
+from app.sessions.tier_resolver import Tier, resolve_tier
 
 log = structlog.get_logger()
 
@@ -281,6 +288,26 @@ def _invoke_structured_chat(
     )
 
 
+def _compression_llm() -> Any:
+    """LLM used by history compression. Tests monkeypatch this."""
+    return get_llm_wrapper()
+
+
+def _critic_llm() -> Any:
+    """LLM used by the Actor-Critic-Boss Critic. Tests monkeypatch this."""
+    return get_llm_wrapper()
+
+
+def _compress_history(history: ConversationHistory) -> None:
+    settings = get_settings()
+    apply_compression(
+        history,
+        llm_wrapper=_compression_llm(),
+        compression_model=settings.COMPRESSION_MODEL,
+        anchor_detection_mode=settings.ANCHOR_DETECTION_MODE,
+    )
+
+
 def render_structured_estimation(result: EstimationResult, output_format: OutputFormat) -> str:
     """Render validated data locally for clients that still display Markdown."""
     def inline(text: str) -> str:
@@ -421,22 +448,28 @@ class EstimationService:
         project_type: ProjectType,
         detail_level: DetailLevel,
         output_format: OutputFormat,
+        tier: Tier | None = None,
         version: str = "v1",
     ) -> EstimationResponse:
         """One turn of a session: ``transcript`` already includes the attachments' text.
 
         The system prompt is re-rendered each turn from the session's ``ProjectMetadata``
+        and the audience tier (``tier`` override, else derived from transcript + metadata),
         and kept as the history's system prompt, so the window never drops it. No cache
         is used: the answer depends on the history, not just on this transcript.
         """
         check_input(transcript, openai_client=self.openai_client)
 
+        resolved_tier, tier_rule = resolve_tier(
+            transcript=transcript, metadata=session.metadata, override=tier
+        )
         system_prompt, user_message = render_conversational_prompt(
             transcript,
             metadata=session.metadata,
             project_type=project_type.value,
             detail_level=detail_level.value,
             output_format=output_format.value,
+            tier=resolved_tier,
             version=version,
         )
         messages = [
@@ -449,6 +482,8 @@ class EstimationService:
             history_messages=len(session.history.messages),
             metadata_is_empty=session.metadata.is_empty(),
             transcript_chars=len(transcript),
+            tier=resolved_tier.value,
+            tier_rule=tier_rule,
             prompt_version=version,
         )
 
@@ -457,10 +492,13 @@ class EstimationService:
         )
         result: EstimationResult = generated["result"]
 
-        session.history.add("user", user_message)
-        session.history.add("assistant", result.model_dump_json())
-        session.metadata = update_metadata(
-            previous=session.metadata, transcript=transcript, result=result
+        _commit_turn(
+            session,
+            transcript=transcript,
+            user_message=user_message,
+            result=result,
+            tier=resolved_tier,
+            tier_rule=tier_rule,
         )
 
         return EstimationResponse(
@@ -469,6 +507,116 @@ class EstimationService:
             result=result,
             cached=False,
         )
+
+    def estimate_with_acb(
+        self,
+        *,
+        session: Session,
+        transcript: str,
+        project_type: ProjectType,
+        detail_level: DetailLevel,
+        output_format: OutputFormat,
+        tier: Tier | None = None,
+        version: str = "v1",
+    ) -> ACBResponse:
+        """Actor-Critic-Boss variant of :meth:`estimate_conversational`.
+
+        The actor re-renders the prompt on each iteration so the critic's feedback is
+        woven in. Only the final Boss-approved (or synthesized) result is persisted:
+        from the session's point of view the turn produced exactly one assistant message.
+        """
+        check_input(transcript, openai_client=self.openai_client)
+
+        settings = get_settings()
+        resolved_tier, tier_rule = resolve_tier(
+            transcript=transcript, metadata=session.metadata, override=tier
+        )
+        log.info(
+            "generating_acb_estimation",
+            session_id=session.session_id,
+            tier=resolved_tier.value,
+            tier_rule=tier_rule,
+            transcript_chars=len(transcript),
+            prompt_version=version,
+            max_iterations=settings.BOSS_MAX_ITERATIONS,
+        )
+
+        def render(feedback: CriticFeedback | None) -> tuple[str, str]:
+            return render_conversational_prompt(
+                transcript,
+                metadata=session.metadata,
+                project_type=project_type.value,
+                detail_level=detail_level.value,
+                output_format=output_format.value,
+                tier=resolved_tier,
+                critic_feedback=feedback,
+                version=version,
+            )
+
+        def actor(feedback: CriticFeedback | None) -> EstimationResult:
+            system_prompt, user_message = render(feedback)
+            messages = [
+                *session.history.to_messages_list(system_prompt),
+                {"role": "user", "content": user_message},
+            ]
+            draft = _run_structured_estimation(
+                lambda: _invoke_structured_chat(messages=messages), output_format
+            )["result"]
+            log.info(
+                "acb_actor_draft",
+                with_critic_feedback=feedback is not None,
+                confidence_pct=draft.confidence_pct,
+                total_cost_eur=draft.total_cost_eur,
+            )
+            return draft
+
+        critic = Critic(llm_wrapper=_critic_llm(), model=settings.CRITIC_MODEL)
+        boss = Boss(max_iterations=settings.BOSS_MAX_ITERATIONS)
+        result, trace = boss.run(
+            actor=actor,
+            critic=lambda draft: critic.review(
+                transcript=transcript, metadata=session.metadata, tier=resolved_tier, result=draft
+            ),
+        )
+
+        # Persist the turn as the user asked it, without the transient critic feedback.
+        _, user_message = render(None)
+        _commit_turn(
+            session,
+            transcript=transcript,
+            user_message=user_message,
+            result=result,
+            tier=resolved_tier,
+            tier_rule=tier_rule,
+        )
+
+        return ACBResponse(
+            text=render_structured_estimation(result, output_format),
+            prompt_version=version,
+            result=result,
+            cached=False,
+            acb=trace,
+        )
+
+
+def _commit_turn(
+    session: Session,
+    *,
+    transcript: str,
+    user_message: str,
+    result: EstimationResult,
+    tier: Tier,
+    tier_rule: str,
+) -> None:
+    """Record a successful turn: tier, history (then compression) and refreshed metadata."""
+    session.last_resolved_tier = tier.value
+    session.last_tier_rule = tier_rule
+    session.history.add("user", user_message)
+    session.history.add("assistant", result.model_dump_json())
+    _compress_history(session.history)
+    session.metadata = update_metadata(
+        previous=session.metadata, transcript=transcript, result=result
+    )
 
 
 def generate_estimation(

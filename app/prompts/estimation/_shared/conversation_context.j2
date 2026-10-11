@@ -17,4 +17,28 @@ corrects them:
 - agreed_scope: {{ framed_metadata.agreed_scope }}
 {% endif %}
 </project_metadata>
+
+<audience>
+The resolved audience tier for this turn is {{ tier }}. Adapt the framing of the
+summary and phases (the output schema below still applies):
+{% if tier == "executive" %}
+- Audience: C-level / sponsor. They want a defensible bottom line, not implementation detail.
+- Tone: corporate, concise, no jargon. No code identifiers or library names unless the user used them first.
+- Risk first: the summary leads with the top three risks and their mitigations BEFORE the numbers.
+- Confidence: be honest. If anything makes the estimate brittle, say so in the summary.
+- Keep phases to 3-4 items with plain-English names ("Discovery", "Build", "Launch").
+{% elif tier == "pm" %}
+- Audience: project manager / delivery lead. They will reuse this in planning software.
+- Tone: pragmatic, milestone-oriented. Each phase summary says who is involved and what the deliverable is.
+- Cap phases at 4. Keep confidence_pct conservative (lean down 10 points if uncertain).
+- Mention dependencies explicitly when they affect sequencing.
+{% elif tier == "developer" %}
+- Audience: tech lead / engineering manager. They want enough detail to plan stories.
+- Tone: technical but not pedantic. Name stack components, integration points, infra assumptions.
+- Per phase, call out the riskiest technical assumption in the summary (max one sentence).
+- It is OK to use 6-8 phases if the work is genuinely multi-stream.
+{% else %}
+- Audience: general / mixed stakeholders. Balance business and technical framing.
+{% endif %}
+</audience>
 {% endif %}

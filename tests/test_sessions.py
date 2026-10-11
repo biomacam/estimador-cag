@@ -8,12 +8,38 @@ from app.sessions import (
     SessionNotFoundError,
     SessionStore,
 )
+from app.sessions.compression import CompressionPolicy
+from app.sessions.compression.anchors import AnchorDetector
+from app.sessions.compression.summarizer import CumulativeSummarizer
+
+
+class _NoSummaryLlm:
+    def complete_structured_chat(self, **kwargs):
+        raise RuntimeError("offline")
+
+
+def _compress(history: ConversationHistory) -> None:
+    CompressionPolicy(
+        anchor_detector=AnchorDetector(),
+        summarizer=CumulativeSummarizer(llm_wrapper=_NoSummaryLlm(), model="m"),
+    ).apply(history)
 
 
 def _add_turns(history: ConversationHistory, count: int) -> None:
     for n in range(1, count + 1):
         history.add("user", f"u{n}")
         history.add("assistant", f"a{n}")
+        _compress(history)
+
+
+def test_add_only_appends_and_leaves_trimming_to_the_policy() -> None:
+    history = ConversationHistory(max_turns=1)
+
+    for n in range(3):
+        history.add("user", f"u{n}")
+        history.add("assistant", f"a{n}")
+
+    assert len(history.messages) == 6
 
 
 def test_window_drops_the_oldest_turns_beyond_max_turns() -> None:
@@ -38,7 +64,7 @@ def test_pending_user_message_counts_as_a_turn_and_keeps_roles_aligned() -> None
     _add_turns(history, 2)
 
     history.add("user", "u3")
-
+    _compress(history)
     assert [m.content for m in history.messages] == ["u2", "a2", "u3"]
     assert history.messages[0].role == "user"
 
