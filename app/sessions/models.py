@@ -112,6 +112,7 @@ class Session(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid4()))
     history: ConversationHistory = Field(default_factory=ConversationHistory)
     metadata: ProjectMetadata = Field(default_factory=ProjectMetadata)
+    turn_count: int = Field(default=0, exclude=True)
     # Cached from the last successful turn so GET /sessions/{id} need not re-run the resolver.
     last_resolved_tier: str | None = None
     last_tier_rule: str | None = None

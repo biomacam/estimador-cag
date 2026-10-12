@@ -62,6 +62,8 @@ def test_get_session_returns_metadata_apart_from_the_history_size(
         "summary_chars": 0,
         "last_resolved_tier": None,
         "last_tier_rule": None,
+        "summary": None,
+        "anchors": [],
         "metadata": {
             "project_name": "Nimbus",
             "assumed_team_size": None,
