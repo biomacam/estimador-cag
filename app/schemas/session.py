@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.sessions import ProjectMetadata
+from app.sessions import Message, ProjectMetadata
 
 
 class CreateSessionResponse(BaseModel):
@@ -18,3 +18,5 @@ class SessionInfoResponse(BaseModel):
     last_resolved_tier: str | None = Field(description="Audience tier used in the last successful turn")
     last_tier_rule: str | None = Field(description="Rule that decided that tier (or explicit_override)")
     metadata: ProjectMetadata
+    summary: str | None = Field(default=None, description="Cumulative summary text of evicted turns")
+    anchors: list[Message] = Field(default_factory=list, description="Anchor messages kept verbatim")

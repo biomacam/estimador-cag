@@ -30,6 +30,7 @@ from app.schemas.estimation import (
     ACBResponse,
     DetailLevel, EstimationRequest, EstimationResponse, EstimationResult, ExampleFormat, OutputFormat,
     PreprocessingMode, ProjectType,
+    TurnObservation,
 )
 from app.services.boss import Boss
 from app.services.critic import Critic
@@ -392,6 +393,7 @@ def _run_structured_estimation(
     return {
         "estimation": render_structured_estimation(result, output_format),
         "result": result,
+        **meta,
         "cache_hit": meta.get("cache_hit", False),
     }
 
@@ -450,6 +452,7 @@ class EstimationService:
         output_format: OutputFormat,
         tier: Tier | None = None,
         version: str = "v1",
+        attachments_total_chars: int = 0,
     ) -> EstimationResponse:
         """One turn of a session: ``transcript`` already includes the attachments' text.
 
@@ -501,11 +504,29 @@ class EstimationService:
             tier_rule=tier_rule,
         )
 
+        observation = TurnObservation(
+            turn_index=session.turn_count,
+            session_id=session.session_id,
+            enriched_transcript_chars=len(transcript),
+            attachments_total_chars=attachments_total_chars,
+            messages_in_window=len(session.history.messages),
+            anchors_count=len(session.history.anchors),
+            summary_chars=len(session.history.summary or ""),
+            tokens_in=int(generated.get("tokens_in", 0) or 0),
+            tokens_out=int(generated.get("tokens_out", 0) or 0),
+            cost_usd=float(generated.get("cost_usd", 0.0) or 0.0),
+            latency_ms=int(generated.get("latency_ms", 0) or 0),
+            cache_hit_kind="none",
+            last_resolved_tier=session.last_resolved_tier,
+        )
+        log.info("turn_observed", **observation.model_dump())
+
         return EstimationResponse(
             text=generated["estimation"],
             prompt_version=version,
             result=result,
             cached=False,
+            observation=observation,
         )
 
     def estimate_with_acb(
@@ -611,6 +632,7 @@ def _commit_turn(
     """Record a successful turn: tier, history (then compression) and refreshed metadata."""
     session.last_resolved_tier = tier.value
     session.last_tier_rule = tier_rule
+    session.turn_count += 1
     session.history.add("user", user_message)
     session.history.add("assistant", result.model_dump_json())
     _compress_history(session.history)

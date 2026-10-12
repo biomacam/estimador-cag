@@ -68,6 +68,8 @@ def get_session(
         last_resolved_tier=session.last_resolved_tier,
         last_tier_rule=session.last_tier_rule,
         metadata=session.metadata,
+        summary=session.history.summary,
+        anchors=session.history.anchors,
     )
 
 
@@ -102,7 +104,9 @@ def estimate_in_session(
 
     Plain ``def`` for the same reason as ``create_estimation``: the LLM call blocks.
     """
-    session, enriched = _prepare_turn(session_id, transcript, attachments, store, settings)
+    session, enriched, attachments_total_chars = _prepare_turn(
+        session_id, transcript, attachments, store, settings
+    )
     return _run_turn(
         lambda: service.estimate_conversational(
             session=session,
@@ -112,6 +116,7 @@ def estimate_in_session(
             output_format=output_format,
             tier=tier,
             version=prompt_version,
+            attachments_total_chars=attachments_total_chars,
         )
     )
 
@@ -136,7 +141,9 @@ def estimate_in_session_acb(
     with the critic's feedback, or return the last draft annotated with open caveats.
     The ``acb`` field carries the per-iteration audit trail.
     """
-    session, enriched = _prepare_turn(session_id, transcript, attachments, store, settings)
+    session, enriched, _attachments_total_chars = _prepare_turn(
+        session_id, transcript, attachments, store, settings
+    )
     return _run_turn(
         lambda: service.estimate_with_acb(
             session=session,
@@ -156,8 +163,8 @@ def _prepare_turn(
     attachments: list[UploadFile],
     store: SessionStore,
     settings: Settings,
-) -> tuple[Session, str]:
-    """Resolve the session and return it with the attachment-enriched transcript."""
+) -> tuple[Session, str, int]:
+    """Resolve the session and return its enriched transcript and attachment text size."""
     try:
         session = store.get(session_id)
     except SessionNotFoundError as exc:
@@ -181,6 +188,7 @@ def _prepare_turn(
         raise _attachment_http_error(422, exc) from exc
 
     enriched = enrich_transcript(transcript, extracted)
+    attachments_total_chars = sum(len(text) for _, text in extracted)
     log.info(
         "session_estimate_received",
         session_id=session_id,
@@ -188,7 +196,7 @@ def _prepare_turn(
         enriched_chars=len(enriched),
         attachments=[name for name, _ in extracted],
     )
-    return session, enriched
+    return session, enriched, attachments_total_chars
 
 
 def _run_turn(run: Callable[[], _T]) -> _T:

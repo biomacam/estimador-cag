@@ -11,6 +11,8 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
+import json
+
 from app.config import get_settings
 from app.dependencies import get_estimation_service, get_session_store
 from app.main import app
@@ -46,7 +48,13 @@ class FakeLlm:
             total_duration_weeks=sum(phase["duration_weeks"] for phase in phases),
             total_cost_eur=sum(phase["cost_eur"] for phase in phases),
         )
-        return result, {"cache_hit": False}
+        return result, {
+            "cache_hit": False,
+            "tokens_in": 11,
+            "tokens_out": 22,
+            "cost_usd": 0.003,
+            "latency_ms": 44,
+        }
 
     def extract(self, messages: list[dict[str, str]]) -> tuple[ProjectMetadata, dict]:
         """Reads only the latest user transcript, like the real extractor is asked to."""
@@ -156,6 +164,56 @@ def test_a_pdf_attachment_changes_the_estimation(llm: FakeLlm) -> None:
     assert "--- attachment: requirements.pdf ---" in llm.calls[1][-1]["content"]
 
 
+def test_turn_observation_is_one_complete_event_with_attachment_metrics(
+    llm: FakeLlm, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed: list[dict] = []
+
+    class EventLogger:
+        def info(self, event: str, **fields: object) -> None:
+            if event == "turn_observed":
+                observed.append(fields)
+
+    monkeypatch.setattr(llm_service, "log", EventLogger())
+    pdf = make_pdf("The portal must support SSO with SAML for all employees")
+
+    async def scenario() -> dict:
+        async with _api() as api:
+            response = await _turn(
+                api,
+                await _new_session(api),
+                PORTAL,
+                files=[("attachments", ("requirements.pdf", pdf, "application/pdf"))],
+            )
+            return response.json()["observation"]
+
+    observation = asyncio.run(scenario())
+# Debug print of the observation for inspection
+#    print(json.dumps(observation, indent=2))
+
+    assert len(observed) == 1
+    assert observed[0] == observation
+    assert observation["turn_index"] == 1
+    assert observation["enriched_transcript_chars"] > len(PORTAL)
+    assert observation["attachments_total_chars"] == len(
+        "The portal must support SSO with SAML for all employees"
+    )
+    assert observation["messages_in_window"] == 2
+    assert observation["anchors_count"] == 0
+    assert observation["summary_chars"] == 0
+    assert observation["tokens_in"] == 11
+    assert observation["tokens_out"] == 22
+    assert observation["cost_usd"] == 0.003
+    assert observation["latency_ms"] == 44
+    assert observation["cache_hit_kind"] == "none"
+    assert observation["last_resolved_tier"] is not None
+    assert set(observed[0]) == {
+        "turn_index", "session_id", "enriched_transcript_chars", "attachments_total_chars",
+        "messages_in_window", "anchors_count", "summary_chars", "tokens_in", "tokens_out",
+        "cost_usd", "latency_ms", "cache_hit_kind", "last_resolved_tier",
+    }
+
+
 @pytest.mark.parametrize("max_turns", [3, MAX_TURNS])
 def test_eight_turns_never_send_more_history_than_the_configured_window(
     llm: FakeLlm, monkeypatch: pytest.MonkeyPatch, max_turns: int
@@ -164,15 +222,21 @@ def test_eight_turns_never_send_more_history_than_the_configured_window(
     get_settings.cache_clear()
     get_session_store.cache_clear()
 
-    async def scenario() -> None:
+    async def scenario() -> list[int]:
+        turn_indexes = []
         async with _api() as api:
             session_id = await _new_session(api)
             for turn in range(1, 9):
-                await _turn(api, session_id, f"Turn {turn}: keep refining the customer portal scope.")
+                response = await _turn(
+                    api, session_id, f"Turn {turn}: keep refining the customer portal scope."
+                )
+                turn_indexes.append(response.json()["observation"]["turn_index"])
+        return turn_indexes
 
-    asyncio.run(scenario())
+    turn_indexes = asyncio.run(scenario())
 
     assert len(llm.calls) == 8
+    assert turn_indexes == list(range(1, 9))
     for number, messages in enumerate(llm.calls, start=1):
         history = messages[1:-1]
         assert messages[0]["role"] == "system"

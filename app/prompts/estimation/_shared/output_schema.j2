@@ -31,3 +31,8 @@ to it. Decide every phase first, then set total_cost_eur to the exact arithmetic
 sum of every phase.cost_eur, and total_duration_weeks to the sum of every
 phase.duration_weeks (sequential delivery). Re-read your own answer before
 returning and confirm both sums match.
+
+If the client states a budget or any other target figure, treat it as a constraint
+to compare against, never as the total: size the phases first, set total_cost_eur
+to their exact sum even when it differs from the stated budget, and say in the
+summary how the estimate relates to that budget.
