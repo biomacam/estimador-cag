@@ -41,6 +41,11 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application source code.
 COPY app/ /app/app/
 
+# Migrations, run on startup by docker-compose, and the data-source catalog.
+COPY alembic/ /app/alembic/
+COPY alembic.ini /app/alembic.ini
+COPY data/ /app/data/
+
 # Streamlit client lives at the repo root, not under app/ — copied separately
 # so the same image can run either the API (default CMD) or the client.
 COPY streamlit_app.py /app/streamlit_app.py

@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
-from app.routers import estimations, sessions
+from app.routers import estimations, ingestion, sessions
 from app.services.llm_service import LLM_PROVIDER_ERROR_MESSAGE, LLMServiceError
 from app.services.llm_wrapper import LLMConfigurationError
 
@@ -43,6 +43,19 @@ async def lifespan(app: FastAPI):
     configure_logging()
     log = structlog.get_logger()
     settings = get_settings()
+    # A broken catalog is a deploy-time problem: log it at startup, but keep /health reachable.
+    try:
+        from app.dependencies import get_catalog
+
+        catalog = get_catalog()
+        log.info(
+            "catalog_loaded",
+            version=catalog.version,
+            sources_total=len(catalog.sources),
+            sources_included=len(catalog.included_sources()),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error("catalog_load_failed", error_type=type(exc).__name__, error=str(exc)[:400])
     log.info("application_started", environment=settings.APP_ENV)
     yield
     log.info("application_shutdown")
@@ -59,6 +72,7 @@ app = FastAPI(
 
 app.include_router(estimations.router)
 app.include_router(sessions.router)
+app.include_router(ingestion.router)
 
 
 @app.exception_handler(LLMConfigurationError)

@@ -93,10 +93,14 @@ estimador-cag/
 │   ├── attachments.py                 # Extraccion de texto de PDF/DOCX y errores asociados
 │   ├── routers/
 │   │   ├── estimations.py             # POST /api/v1/estimate y streaming SSE
+│   │   ├── ingestion.py               # POST /api/v1/ingestion/runs, GET /api/v1/ingestion/jobs/{id}
 │   │   └── sessions.py                # POST /sessions, GET /sessions/{id}, POST /sessions/{id}/estimate
 │   ├── schemas/
 │   │   ├── estimation.py              # EstimationRequest, EstimationResult, EstimationResponse, enums
+│   │   ├── ingestion.py               # IngestionRunRequest, IngestionRunResponse, IngestionJobView
 │   │   └── session.py                 # CreateSessionResponse, SessionInfoResponse
+│   ├── ingestion/                     # Catalogo, loader, parsers, limpieza, PII y orchestrator
+│   ├── persistence/                   # SQLAlchemy: jobs de ingesta y mapeo de seudonimos (Alembic en alembic/)
 │   ├── services/
 │   │   ├── llm_service.py             # EstimationService: guardrails, prompts, llamada estructurada, turno conversacional
 │   │   ├── llm_wrapper.py             # LiteLLM + Instructor, fallback, streaming, cost tracking
@@ -140,12 +144,21 @@ estimador-cag/
 │   ├── test_cag_invariant.py
 │   ├── test_examples_format.py
 │   ├── test_config.py
+│   ├── test_catalog_loader.py         # Ingesta: catalogo YAML y validadores
+│   ├── test_loader_filesystem.py      # Ingesta: loader y contencion dentro de la raiz de datos
+│   ├── test_parsers_*.py              # Ingesta: parsers JSON/TXT y registro
+│   ├── test_cleaning_budgets.py       # Ingesta: limpieza pandas y politica Pandera
+│   ├── test_pii_*.py                  # Ingesta: reconocedores y seudonimizador (Presidio)
+│   ├── test_ingestion_*.py            # Ingesta: orchestrator, endpoints y seed real
+│   ├── test_persistence.py            # Repositorio de jobs con SQLite
+│   ├── test_persistence_postgres.py   # Migraciones y mapeo concurrente; requiere TEST_DATABASE_URL
 │   ├── test_schemas.py
 │   ├── test_health.py
 │   ├── test_evaluation.py
 │   ├── test_streamlit_app.py          # Cliente Streamlit con HTTP simulado
 │   └── prompts/                       # test_estimation_v1.py, test_estimation_v2.py, test_conversational.py
 ├── src/estimador_cag/__init__.py      # Paquete auxiliar
+├── scripts/                           # preflight.py, demo_cleaning.py y demo_pii.py (uv run python scripts/<nombre>.py)
 ├── streamlit_app.py                   # Cliente: sesion, formulario con adjuntos, panel de metadata
 ├── test.json                          # Payload de ejemplo para el streaming
 ├── Dockerfile                         # Multi-stage con uv

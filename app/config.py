@@ -1,7 +1,8 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.sessions import MAX_TURNS
@@ -59,6 +60,24 @@ class Settings(BaseSettings):
     CRITIC_MODEL: str = "gpt-4o-mini"
     # Each iteration = 1 actor + 1 critic call. Three = initial draft + two directed retries.
     BOSS_MAX_ITERATIONS: int = Field(default=3, ge=1, le=5)
+
+    # --- Ingestion (Postgres persistence + data-source catalog + PII) ---
+    DATABASE_URL: str = "postgresql+psycopg://estimator:estimator@localhost:5433/estimator"
+    # Resolved relative to the working directory.
+    CATALOG_PATH: Path = Path("data/catalog/catalog.yaml")
+    # Root that ``CatalogSource.location`` entries are resolved against.
+    INGESTION_DATA_ROOT: Path = Path("data/seed")
+    # Must be a Spanish model: Presidio's default silently misses Hispanic names.
+    PRESIDIO_SPACY_MODEL: str = "es_core_news_md"
+    PSEUDONYM_FAKER_LOCALE: str = "es_ES"
+    # HMAC salt behind pseudonym_mappings.original_hash; rotating it invalidates all mappings.
+    PSEUDONYM_HASH_SALT: str = "change-me-in-prod"
+
+    @model_validator(mode="after")
+    def _salt_must_be_set_in_production(self) -> "Settings":
+        if self.APP_ENV == "production" and self.PSEUDONYM_HASH_SALT == "change-me-in-prod":
+            raise ValueError("PSEUDONYM_HASH_SALT must be changed from its default in production.")
+        return self
 
     @property
     def is_llm_configured(self) -> bool:
