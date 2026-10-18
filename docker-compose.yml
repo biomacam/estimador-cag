@@ -12,23 +12,31 @@ services:
     env_file:
       - .env
 
-    # Override REDIS_URL for the in-network Redis service. The .env value
-    # (redis://localhost:6379) is meant for running uvicorn outside Docker.
+    # Override service URLs for the in-network services. The .env values are
+    # meant for running uvicorn outside Docker.
     environment:
       REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql+psycopg://estimator:estimator@estimator-postgres:5432/estimator
 
     depends_on:
       redis:
         condition: service_healthy
+      estimator-postgres:
+        condition: service_healthy
 
-    # Bind-mount the app/ directory so code changes are reflected immediately
-    # inside the container without rebuilding the image.
+    # Bind-mount app/, data/ and alembic/ so code, ingest sources and new
+    # migrations are reflected without rebuilding the image.
     volumes:
       - ./app:/app/app
+      - ./data:/app/data
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
 
-    # Override the default CMD to enable auto-reload on file changes.
+    # Apply pending migrations, then run uvicorn with auto-reload.
     # Remove --reload for production deployments.
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
     restart: unless-stopped
 
@@ -37,7 +45,7 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      start_period: 30s
       retries: 3
 
   redis:
@@ -55,6 +63,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
+
+  estimator-postgres:
+    # pgvector image so a later migration can enable the extension without
+    # recreating the container; it is not activated yet.
+    image: pgvector/pgvector:pg16
+    container_name: estimator-postgres
+    environment:
+      POSTGRES_USER: estimator
+      POSTGRES_PASSWORD: estimator
+      POSTGRES_DB: estimator
+    ports:
+      - "5433:5432"
+    volumes:
+      - estimator_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "estimator", "-d", "estimator"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   streamlit:
@@ -93,3 +121,4 @@ services:
 
 volumes:
   redis_data:
+  estimator_postgres_data:

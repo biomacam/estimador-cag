@@ -81,6 +81,66 @@ uv sync
 uv run uvicorn app.main:app --reload
 ```
 
+## Pipeline de embeddings
+
+`app/embedding_pipeline/` convierte cada componente de un presupuesto en un chunk
+con contexto del proyecto y metadatos separados. Cuenta tokens con `tiktoken` y
+genera embeddings con `text-embedding-3-small` en lotes de hasta 100 chunks,
+con reintentos ante limites de tasa. Devuelve los vectores en memoria, sin
+persistencia vectorial ni cambios en el flujo CAG de estimacion.
+
+El endpoint `POST /embeddings/ingest` recibe `{"budgets": [...]}` con el formato
+de `data/budgets_sample.json` y devuelve `chunks` y `stats` (presupuestos, chunks,
+tokens y coste estimado en USD a $0.02 por millon de tokens del modelo por defecto).
+Requiere `OPENAI_API_KEY`; sin ella responde 500, igual que la implementacion
+de referencia. No se utiliza la clave de Anthropic para embeddings.
+
+Reconstruir el servicio (en este Compose se llama `estimator`, no `servicio_ia`):
+
+```powershell
+docker compose build estimator
+```
+
+### Comparar dos textos desde la CLI
+
+El script `scripts/compare.py` reutiliza `OpenAIEmbedder` y calcula la similitud
+coseno como el producto escalar dividido por el producto de las normas, usando
+solo la biblioteca estandar (`math`), sin numpy ni scikit-learn.
+
+Ejecuta los comandos desde la raiz de `estimador-cag`. Fuera del contenedor,
+`get_settings()` carga automaticamente el archivo `.env`: configura
+`OPENAI_API_KEY` y, opcionalmente, `EMBEDDING_MODEL` (por defecto,
+`text-embedding-3-small`). No es necesario arrancar la API, Redis ni Postgres:
+
+```powershell
+uv run python scripts/compare.py --text-a "OAuth 2.0 authentication backend for fintech" --text-b "JWT-based authorization service for banking app"
+```
+
+Dentro del contenedor, Compose inyecta las variables de `.env`. El servicio
+equivalente a `servicio_ia` se llama `estimator` en este proyecto. Tras crear o
+modificar el script, reconstruye y recrea el servicio para actualizar su copia:
+
+```powershell
+docker compose up -d --build estimator
+docker compose exec estimator python scripts/compare.py --text-a "OAuth 2.0 authentication backend for fintech" --text-b "JWT-based authorization service for banking app"
+```
+
+La salida muestra ambos textos y la similitud con cuatro decimales (el valor
+depende de los embeddings; este es solo un ejemplo):
+
+```text
+Text A: OAuth 2.0 authentication backend for fintech
+Text B: JWT-based authorization service for banking app
+Cosine similarity: 0.8421
+```
+
+Ambos comandos de comparacion realizan llamadas reales a OpenAI y tienen coste.
+Las pruebas del pipeline usan un cliente simulado:
+
+```powershell
+uv run pytest tests/test_embedding_pipeline.py -q
+```
+
 ## Estructura del proyecto
 
 ```
@@ -93,10 +153,14 @@ estimador-cag/
 │   ├── attachments.py                 # Extraccion de texto de PDF/DOCX y errores asociados
 │   ├── routers/
 │   │   ├── estimations.py             # POST /api/v1/estimate y streaming SSE
+│   │   ├── ingestion.py               # POST /api/v1/ingestion/runs, GET /api/v1/ingestion/jobs/{id}
 │   │   └── sessions.py                # POST /sessions, GET /sessions/{id}, POST /sessions/{id}/estimate
 │   ├── schemas/
 │   │   ├── estimation.py              # EstimationRequest, EstimationResult, EstimationResponse, enums
+│   │   ├── ingestion.py               # IngestionRunRequest, IngestionRunResponse, IngestionJobView
 │   │   └── session.py                 # CreateSessionResponse, SessionInfoResponse
+│   ├── ingestion/                     # Catalogo, loader, parsers, limpieza, PII y orchestrator
+│   ├── persistence/                   # SQLAlchemy: jobs de ingesta y mapeo de seudonimos (Alembic en alembic/)
 │   ├── services/
 │   │   ├── llm_service.py             # EstimationService: guardrails, prompts, llamada estructurada, turno conversacional
 │   │   ├── llm_wrapper.py             # LiteLLM + Instructor, fallback, streaming, cost tracking
@@ -140,12 +204,21 @@ estimador-cag/
 │   ├── test_cag_invariant.py
 │   ├── test_examples_format.py
 │   ├── test_config.py
+│   ├── test_catalog_loader.py         # Ingesta: catalogo YAML y validadores
+│   ├── test_loader_filesystem.py      # Ingesta: loader y contencion dentro de la raiz de datos
+│   ├── test_parsers_*.py              # Ingesta: parsers JSON/TXT y registro
+│   ├── test_cleaning_budgets.py       # Ingesta: limpieza pandas y politica Pandera
+│   ├── test_pii_*.py                  # Ingesta: reconocedores y seudonimizador (Presidio)
+│   ├── test_ingestion_*.py            # Ingesta: orchestrator, endpoints y seed real
+│   ├── test_persistence.py            # Repositorio de jobs con SQLite
+│   ├── test_persistence_postgres.py   # Migraciones y mapeo concurrente; requiere TEST_DATABASE_URL
 │   ├── test_schemas.py
 │   ├── test_health.py
 │   ├── test_evaluation.py
 │   ├── test_streamlit_app.py          # Cliente Streamlit con HTTP simulado
 │   └── prompts/                       # test_estimation_v1.py, test_estimation_v2.py, test_conversational.py
 ├── src/estimador_cag/__init__.py      # Paquete auxiliar
+├── scripts/                           # preflight.py, demo_cleaning.py y demo_pii.py (uv run python scripts/<nombre>.py)
 ├── streamlit_app.py                   # Cliente: sesion, formulario con adjuntos, panel de metadata
 ├── test.json                          # Payload de ejemplo para el streaming
 ├── Dockerfile                         # Multi-stage con uv

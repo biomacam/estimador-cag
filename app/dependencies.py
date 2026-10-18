@@ -9,6 +9,11 @@ import structlog
 from openai import OpenAI
 
 from app.config import get_settings
+from app.embedding_pipeline.chunker import JSONStructuralChunker
+from app.embedding_pipeline.embedder import OpenAIEmbedder
+from app.ingestion.catalog import DataCatalog, load_catalog
+from app.ingestion.loaders.filesystem import FileSystemLoader
+from app.ingestion.parsers.registry import ParserRegistry, default_registry
 from app.services.cache import EstimationCache
 from app.services.llm_wrapper import LLMConfigurationError, LLMWrapper
 from app.sessions import SessionStore
@@ -28,6 +33,23 @@ def get_openai_client() -> OpenAI | None:
     if not settings.OPENAI_API_KEY:
         return None
     return OpenAI(api_key=settings.OPENAI_API_KEY)
+
+
+@lru_cache
+def get_chunker() -> JSONStructuralChunker:
+    """Shared stateless structural chunker."""
+    return JSONStructuralChunker()
+
+
+@lru_cache
+def get_embedder() -> OpenAIEmbedder | None:
+    """Return no embedder when an OpenAI key is not configured."""
+    settings = get_settings()
+    client = get_openai_client()
+    if client is None:
+        log.warning("embedder_disabled", reason="no_openai_key")
+        return None
+    return OpenAIEmbedder(client=client, model=settings.EMBEDDING_MODEL)
 
 
 def get_estimation_service() -> EstimationService:
@@ -73,6 +95,44 @@ def get_semantic_cache() -> EstimationSemanticCache | None:
             error_type=type(exc).__name__, error=str(exc)[:200],
         )
         return None
+
+
+@lru_cache
+def get_catalog() -> DataCatalog:
+    """Load and cache the data-source catalog.
+
+    Read once per process; rolling a new catalog version requires a restart so the
+    decisions baked into a running pipeline never change mid-flight.
+    """
+    return load_catalog(get_settings().CATALOG_PATH)
+
+
+@lru_cache
+def get_filesystem_loader() -> FileSystemLoader:
+    return FileSystemLoader(data_root=get_settings().INGESTION_DATA_ROOT)
+
+
+@lru_cache
+def get_parser_registry() -> ParserRegistry:
+    return default_registry()
+
+
+def build_pseudonymizer(session):
+    """Build a :class:`ConsistentPseudonymizer` backed by Postgres.
+
+    Not a singleton: the mapping store wraps a Session, so each caller passes its
+    own. Imported lazily because Presidio and spaCy are slow to import.
+    """
+    from app.ingestion.pii import ConsistentPseudonymizer, PostgresMappingStore, build_analyzer
+
+    settings = get_settings()
+    return ConsistentPseudonymizer(
+        analyzer=build_analyzer(),
+        mapping_store=PostgresMappingStore(session),
+        salt=settings.PSEUDONYM_HASH_SALT,
+        faker_locale=settings.PSEUDONYM_FAKER_LOCALE,
+        language="es",
+    )
 
 
 @lru_cache

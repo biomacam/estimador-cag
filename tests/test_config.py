@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -39,3 +41,22 @@ def test_conversation_and_attachment_defaults() -> None:
 def test_conversation_window_must_be_positive() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, MAX_CONVERSATION_TURNS=0)
+
+
+def test_ingestion_defaults() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.CATALOG_PATH == Path("data/catalog/catalog.yaml")
+    assert settings.INGESTION_DATA_ROOT == Path("data/seed")
+    assert settings.PRESIDIO_SPACY_MODEL == "es_core_news_md"
+    assert settings.DATABASE_URL.startswith("postgresql+psycopg://")
+
+
+def test_default_pseudonym_salt_is_rejected_in_production() -> None:
+    with pytest.raises(ValidationError, match="PSEUDONYM_HASH_SALT"):
+        Settings(_env_file=None, APP_ENV="production")
+
+
+def test_custom_pseudonym_salt_is_accepted_in_production() -> None:
+    settings = Settings(_env_file=None, APP_ENV="production", PSEUDONYM_HASH_SALT="s3cret")
+    assert settings.APP_ENV == "production"

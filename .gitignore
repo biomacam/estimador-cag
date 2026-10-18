@@ -30,3 +30,6 @@ evals/stress/results.csv
 
 # Session guides / docs
 docs/
+
+# Graphify generated artifacts
+/graphify-out/
