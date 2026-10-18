@@ -1,0 +1,1 @@
+"""Structural chunking and OpenAI embeddings for historical budgets."""

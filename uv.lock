@@ -546,6 +546,7 @@ dependencies = [
     { name = "sse-starlette" },
     { name = "streamlit" },
     { name = "structlog" },
+    { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -588,6 +589,7 @@ requires-dist = [
     { name = "sse-starlette", specifier = ">=3.4.11" },
     { name = "streamlit", specifier = ">=1.64.0" },
     { name = "structlog" },
+    { name = "tiktoken", specifier = ">=0.7.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
 ]
 

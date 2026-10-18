@@ -9,6 +9,8 @@ import structlog
 from openai import OpenAI
 
 from app.config import get_settings
+from app.embedding_pipeline.chunker import JSONStructuralChunker
+from app.embedding_pipeline.embedder import OpenAIEmbedder
 from app.ingestion.catalog import DataCatalog, load_catalog
 from app.ingestion.loaders.filesystem import FileSystemLoader
 from app.ingestion.parsers.registry import ParserRegistry, default_registry
@@ -31,6 +33,23 @@ def get_openai_client() -> OpenAI | None:
     if not settings.OPENAI_API_KEY:
         return None
     return OpenAI(api_key=settings.OPENAI_API_KEY)
+
+
+@lru_cache
+def get_chunker() -> JSONStructuralChunker:
+    """Shared stateless structural chunker."""
+    return JSONStructuralChunker()
+
+
+@lru_cache
+def get_embedder() -> OpenAIEmbedder | None:
+    """Return no embedder when an OpenAI key is not configured."""
+    settings = get_settings()
+    client = get_openai_client()
+    if client is None:
+        log.warning("embedder_disabled", reason="no_openai_key")
+        return None
+    return OpenAIEmbedder(client=client, model=settings.EMBEDDING_MODEL)
 
 
 def get_estimation_service() -> EstimationService:

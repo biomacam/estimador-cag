@@ -81,6 +81,66 @@ uv sync
 uv run uvicorn app.main:app --reload
 ```
 
+## Pipeline de embeddings
+
+`app/embedding_pipeline/` convierte cada componente de un presupuesto en un chunk
+con contexto del proyecto y metadatos separados. Cuenta tokens con `tiktoken` y
+genera embeddings con `text-embedding-3-small` en lotes de hasta 100 chunks,
+con reintentos ante limites de tasa. Devuelve los vectores en memoria, sin
+persistencia vectorial ni cambios en el flujo CAG de estimacion.
+
+El endpoint `POST /embeddings/ingest` recibe `{"budgets": [...]}` con el formato
+de `data/budgets_sample.json` y devuelve `chunks` y `stats` (presupuestos, chunks,
+tokens y coste estimado en USD a $0.02 por millon de tokens del modelo por defecto).
+Requiere `OPENAI_API_KEY`; sin ella responde 500, igual que la implementacion
+de referencia. No se utiliza la clave de Anthropic para embeddings.
+
+Reconstruir el servicio (en este Compose se llama `estimator`, no `servicio_ia`):
+
+```powershell
+docker compose build estimator
+```
+
+### Comparar dos textos desde la CLI
+
+El script `scripts/compare.py` reutiliza `OpenAIEmbedder` y calcula la similitud
+coseno como el producto escalar dividido por el producto de las normas, usando
+solo la biblioteca estandar (`math`), sin numpy ni scikit-learn.
+
+Ejecuta los comandos desde la raiz de `estimador-cag`. Fuera del contenedor,
+`get_settings()` carga automaticamente el archivo `.env`: configura
+`OPENAI_API_KEY` y, opcionalmente, `EMBEDDING_MODEL` (por defecto,
+`text-embedding-3-small`). No es necesario arrancar la API, Redis ni Postgres:
+
+```powershell
+uv run python scripts/compare.py --text-a "OAuth 2.0 authentication backend for fintech" --text-b "JWT-based authorization service for banking app"
+```
+
+Dentro del contenedor, Compose inyecta las variables de `.env`. El servicio
+equivalente a `servicio_ia` se llama `estimator` en este proyecto. Tras crear o
+modificar el script, reconstruye y recrea el servicio para actualizar su copia:
+
+```powershell
+docker compose up -d --build estimator
+docker compose exec estimator python scripts/compare.py --text-a "OAuth 2.0 authentication backend for fintech" --text-b "JWT-based authorization service for banking app"
+```
+
+La salida muestra ambos textos y la similitud con cuatro decimales (el valor
+depende de los embeddings; este es solo un ejemplo):
+
+```text
+Text A: OAuth 2.0 authentication backend for fintech
+Text B: JWT-based authorization service for banking app
+Cosine similarity: 0.8421
+```
+
+Ambos comandos de comparacion realizan llamadas reales a OpenAI y tienen coste.
+Las pruebas del pipeline usan un cliente simulado:
+
+```powershell
+uv run pytest tests/test_embedding_pipeline.py -q
+```
+
 ## Estructura del proyecto
 
 ```

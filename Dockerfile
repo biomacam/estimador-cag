@@ -45,6 +45,7 @@ COPY app/ /app/app/
 COPY alembic/ /app/alembic/
 COPY alembic.ini /app/alembic.ini
 COPY data/ /app/data/
+COPY scripts/ /app/scripts/
 
 # Streamlit client lives at the repo root, not under app/ — copied separately
 # so the same image can run either the API (default CMD) or the client.
