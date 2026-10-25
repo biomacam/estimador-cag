@@ -39,22 +39,30 @@ class OpenAIEmbedder:
         """Embed every chunk in order, batching API calls."""
         embedded: list[EmbeddedChunk] = []
         for start in range(0, len(chunks), BATCH_SIZE):
-            batch = chunks[start : start + BATCH_SIZE]
-            texts = [chunk.text for chunk in batch]
-            batch_tokens = sum(chunk.token_count for chunk in batch)
-            started = time.perf_counter()
-            vectors = self._create(texts)
-            latency_ms = round((time.perf_counter() - started) * 1000, 1)
-            log.info(
-                "embedding_batch_done",
-                chunks=len(batch),
-                tokens=batch_tokens,
-                latency_ms=latency_ms,
-                model=self._model,
-            )
-            for chunk, vector in zip(batch, vectors):
-                embedded.append(EmbeddedChunk(**chunk.model_dump(), embedding=vector))
+            embedded.extend(self._embed_batch(chunks[start : start + BATCH_SIZE]))
         return embedded
+
+    def embed_all(self, chunks: list[Chunk]) -> list[EmbeddedChunk]:
+        """Embed all chunks in one provider request, preserving their order."""
+        return self._embed_batch(chunks) if chunks else []
+
+    def _embed_batch(self, chunks: list[Chunk]) -> list[EmbeddedChunk]:
+        texts = [chunk.text for chunk in chunks]
+        batch_tokens = sum(chunk.token_count for chunk in chunks)
+        started = time.perf_counter()
+        vectors = self._create(texts)
+        latency_ms = round((time.perf_counter() - started) * 1000, 1)
+        log.info(
+            "embedding_batch_done",
+            chunks=len(chunks),
+            tokens=batch_tokens,
+            latency_ms=latency_ms,
+            model=self._model,
+        )
+        return [
+            EmbeddedChunk(**chunk.model_dump(), embedding=vector)
+            for chunk, vector in zip(chunks, vectors, strict=True)
+        ]
 
     def _create(self, texts: list[str]) -> list[list[float]]:
         """Retry rate limits; propagate other provider errors."""

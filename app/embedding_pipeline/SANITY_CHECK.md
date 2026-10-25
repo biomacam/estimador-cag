@@ -1,7 +1,7 @@
-# Embedding sanity check
+# Embedding sanity check (historical Session 07 report)
 
 Model: `text-embedding-3-small` (1536 dimensions, default dimension).
-Generated with `scripts/compare.py`.
+Captured with the former standalone `scripts/compare.py`; corpus-backed queries now run through `scripts/query_examples.py`.
 Run date: 2026-10-18.
 
 | Pair | Text A | Text B | Cosine | Expectation |

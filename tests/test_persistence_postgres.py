@@ -13,6 +13,8 @@ database named in the URL is never modified.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -21,11 +23,17 @@ import uuid
 from collections.abc import Iterator
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.embedding_pipeline.chunker import JSONStructuralChunker
+from app.embedding_pipeline.ingestion import DuplicateDocumentError, ingest_document
+from app.embedding_pipeline.schemas import Budget, EmbeddedChunk, IngestRequest, SearchRequest
+from app.embedding_pipeline.search import search_chunks
 from app.ingestion.pii import PostgresMappingStore
+from app.persistence.models import ChunkRow, DocumentRow
 from app.persistence.repositories.jobs import JobsRepository
 from app.persistence.repositories.mappings import MappingsRepository
 
@@ -80,15 +88,113 @@ def test_migration_round_trip(database_url: str) -> None:
     engine = create_engine(database_url)
     try:
         _alembic(database_url, "upgrade", "head")
-        assert {"pseudonym_mappings", "ingestion_jobs"} <= set(inspect(engine).get_table_names())
+        expected_tables = {"pseudonym_mappings", "ingestion_jobs", "documents", "chunks"}
+        assert expected_tables <= set(inspect(engine).get_table_names())
+        assert any(
+            index["name"] == "ix_documents_source_path" and index["unique"]
+            for index in inspect(engine).get_indexes("documents")
+        )
+        with engine.connect() as connection:
+            assert connection.scalar(
+                text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            ) == 1
 
         _alembic(database_url, "downgrade", "base")
-        assert not {"pseudonym_mappings", "ingestion_jobs"} & set(inspect(engine).get_table_names())
+        assert not expected_tables & set(inspect(engine).get_table_names())
 
         _alembic(database_url, "upgrade", "head")
-        assert "ingestion_jobs" in inspect(engine).get_table_names()
+        assert expected_tables <= set(inspect(engine).get_table_names())
     finally:
         engine.dispose()
+
+
+def test_async_document_ingestion_commits_or_rolls_back_as_a_unit(migrated_url: str) -> None:
+    budget_path = os.path.join(os.path.dirname(__file__), "..", "data", "budgets_sample.json")
+    with open(budget_path, encoding="utf-8") as budget_file:
+        budget = Budget.model_validate(json.load(budget_file)[0])
+    source_path = f"data/budgets/test-{uuid.uuid4().hex}.json"
+    request = IngestRequest(
+        source_path=source_path,
+        document_type="historical_budget",
+        content=budget,
+    )
+    failed_request = request.model_copy(update={"source_path": f"{source_path}.failed"})
+
+    class FakeEmbedder:
+        calls = 0
+        query_calls = 0
+
+        def embed_all(self, chunks):
+            self.calls += 1
+            return [
+                EmbeddedChunk(**chunk.model_dump(), embedding=[1.0] * 1536)
+                for chunk in chunks
+            ]
+
+        def embed_one(self, query):
+            self.query_calls += 1
+            return [1.0] * 1536
+
+    class FailingEmbedder:
+        def embed_all(self, chunks):
+            raise RuntimeError("embedding failed")
+
+    async def exercise() -> None:
+        async_url = make_url(migrated_url).set(drivername="postgresql+asyncpg")
+        engine = create_async_engine(async_url, pool_pre_ping=True)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        embedder = FakeEmbedder()
+        chunker = JSONStructuralChunker()
+        try:
+            async with factory() as session:
+                result = await ingest_document(request, session, chunker, embedder)
+            assert result.document_id > 0
+            assert result.chunks_created == len(budget.components)
+            assert result.embedding_dimension == 1536
+            assert embedder.calls == 1
+
+            async with factory() as session:
+                chunk_count = await session.scalar(
+                    select(func.count()).select_from(ChunkRow).where(
+                        ChunkRow.document_id == result.document_id
+                    )
+                )
+            assert chunk_count == result.chunks_created
+
+            async with factory() as session:
+                search_response = await search_chunks(
+                    SearchRequest(query="OAuth authentication", k=100),
+                    session,
+                    embedder,
+                )
+            assert search_response.query == "OAuth authentication"
+            assert search_response.k == 100
+            assert len(search_response.results) == result.chunks_created
+            assert all(result.distance == pytest.approx(0.0) for result in search_response.results)
+            assert embedder.query_calls == 1
+
+            async with factory() as session:
+                with pytest.raises(DuplicateDocumentError) as duplicate:
+                    await ingest_document(request, session, chunker, embedder)
+            assert duplicate.value.document_id == result.document_id
+            assert embedder.calls == 1
+
+            async with factory() as session:
+                with pytest.raises(RuntimeError, match="embedding failed"):
+                    await ingest_document(
+                        failed_request, session, chunker, FailingEmbedder()
+                    )
+            async with factory() as session:
+                failed_document = await session.scalar(
+                    select(DocumentRow).where(
+                        DocumentRow.source_path == failed_request.source_path
+                    )
+                )
+            assert failed_document is None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(exercise())
 
 
 def test_upgrade_is_idempotent(migrated_url: str) -> None:
