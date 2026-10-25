@@ -38,6 +38,10 @@ dependencies = [
     "structlog",
     "tiktoken>=0.7.0",
     "uvicorn[standard]>=0.52.4",
+    "langchain-text-splitters>=0.3.0",
+    "langchain-experimental>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "nltk>=3.9",
 ]
 
 
