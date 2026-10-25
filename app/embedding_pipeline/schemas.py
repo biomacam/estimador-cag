@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -66,71 +66,73 @@ class EmbeddedChunk(Chunk):
 class IngestRequest(BaseModel):
     """Payload for POST /embeddings/ingest."""
 
-    budgets: list[Budget] = Field(min_length=1, description="Budgets to chunk and embed.")
+    source_path: str = Field(min_length=1, description="Stable source path for deduplication.")
+    document_type: str = Field(min_length=1, max_length=50)
+    content: Budget = Field(description="Complete source budget consumed by the structural chunker.")
 
     model_config = {
         "json_schema_extra": {
-            "examples": [{"budgets": [{
-                "budget_id": "BUD-2024-001",
-                "client_metadata": {"name": "FintechCorp", "sector": "finance", "country": "ES"},
-                "project_summary": "Mobile banking API with OAuth 2.0 authentication and PSD2 compliance",
-                "main_technology": "ruby_on_rails",
-                "year": 2024,
-                "total_estimated_hours": 480,
-                "components": [
-                    {
+            "examples": [{
+                "source_path": "data/budgets/budget_2024_q1_fintech.json",
+                "document_type": "historical_budget",
+                "content": {
+                    "budget_id": "BUD-2024-001",
+                    "client_metadata": {
+                        "name": "FintechCorp", "sector": "finance", "country": "ES"
+                    },
+                    "project_summary": "Mobile banking API with OAuth 2.0 authentication",
+                    "main_technology": "ruby_on_rails",
+                    "year": 2024,
+                    "total_estimated_hours": 120,
+                    "components": [{
                         "component_id": "AUTH-001",
                         "name": "OAuth 2.0 authentication backend",
-                        "description": "Implementation of OAuth 2.0 flows (authorization code, refresh token) with JWT-based session management, multi-tenant token isolation, and rate limiting per client.",
-                        "tech_stack": ["ruby_on_rails", "postgresql", "redis"],
+                        "description": "Implement OAuth 2.0 authentication flows.",
+                        "tech_stack": ["ruby_on_rails", "postgresql"],
                         "estimated_hours": 120,
                         "complexity": "high",
                         "dependencies": [],
-                    },
-                    {
-                        "component_id": "PSD2-002",
-                        "name": "PSD2 open banking connectors",
-                        "description": "Account information and payment initiation endpoints compliant with PSD2/Berlin Group, including strong customer authentication (SCA) and consent management.",
-                        "tech_stack": ["ruby_on_rails", "postgresql"],
-                        "estimated_hours": 160,
-                        "complexity": "high",
-                        "dependencies": ["AUTH-001"],
-                    },
-                    {
-                        "component_id": "TXN-003",
-                        "name": "Transaction ledger service",
-                        "description": "Double-entry transaction ledger with idempotent writes, daily reconciliation jobs and an audit trail of every balance change.",
-                        "tech_stack": ["ruby_on_rails", "postgresql", "sidekiq"],
-                        "estimated_hours": 140,
-                        "complexity": "medium",
-                        "dependencies": ["AUTH-001"],
-                    },
-                    {
-                        "component_id": "NOTIF-004",
-                        "name": "Push and email notifications",
-                        "description": "Event-driven notifications for transaction alerts and security events delivered via APNs/FCM and transactional email.",
-                        "tech_stack": ["ruby_on_rails", "redis"],
-                        "estimated_hours": 60,
-                        "complexity": "low",
-                        "dependencies": ["TXN-003"],
-                    },
-                ],
-            }]}],
+                    }],
+                },
+            }],
         },
     }
 
 
-class IngestStats(BaseModel):
-    """Aggregate ingestion counters."""
-
-    total_budgets: int = Field(ge=0)
-    total_chunks: int = Field(ge=0)
-    total_tokens: int = Field(ge=0)
-    estimated_cost_usd: float = Field(ge=0.0)
-
-
 class IngestResponse(BaseModel):
-    """Embedded chunks and aggregate stats."""
+    """Persisted document identifiers and ingestion metrics."""
 
-    chunks: list[EmbeddedChunk]
-    stats: IngestStats
+    document_id: int
+    chunks_created: int = Field(ge=0)
+    embedding_dimension: int = Field(gt=0)
+    ingestion_time_ms: int = Field(ge=0)
+
+
+class IngestConflictResponse(BaseModel):
+    """Conflict response when a source path has already been ingested."""
+
+    detail: str
+    document_id: int
+
+
+class SearchRequest(BaseModel):
+    """Query and result count for POST /search."""
+
+    query: str = Field(min_length=1, max_length=8192)
+    k: int = Field(ge=1, le=100)
+
+
+class SearchResult(BaseModel):
+    chunk_id: int
+    document_id: int
+    chunk_type: str
+    content: str
+    distance: float
+    metadata: dict[str, Any]
+
+
+class SearchResponse(BaseModel):
+    query: str
+    k: int
+    search_time_ms: int = Field(ge=0)
+    results: list[SearchResult]

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
 from app.embedding_pipeline.router import router as embeddings_router
-from app.routers import estimations, ingestion, sessions
+from app.routers import estimations, ingestion, search, sessions
 from app.services.llm_service import LLM_PROVIDER_ERROR_MESSAGE, LLMServiceError
 from app.services.llm_wrapper import LLMConfigurationError
 
@@ -75,6 +75,7 @@ app.include_router(estimations.router)
 app.include_router(sessions.router)
 app.include_router(ingestion.router)
 app.include_router(embeddings_router)
+app.include_router(search.router)
 
 
 @app.exception_handler(LLMConfigurationError)

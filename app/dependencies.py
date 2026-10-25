@@ -9,6 +9,7 @@ import structlog
 from openai import OpenAI
 
 from app.config import get_settings
+from app.embedding_pipeline.base import Chunker
 from app.embedding_pipeline.chunker import JSONStructuralChunker
 from app.embedding_pipeline.embedder import OpenAIEmbedder
 from app.ingestion.catalog import DataCatalog, load_catalog
@@ -50,6 +51,91 @@ def get_embedder() -> OpenAIEmbedder | None:
         log.warning("embedder_disabled", reason="no_openai_key")
         return None
     return OpenAIEmbedder(client=client, model=settings.EMBEDDING_MODEL)
+
+
+@lru_cache
+def get_anthropic_client():
+    settings = get_settings()
+    if not settings.ANTHROPIC_API_KEY:
+        return None
+    import anthropic
+
+    return anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+
+# Strategy modules are imported lazily: langchain/nltk are slow to load at startup.
+def _fixed_size() -> Chunker:
+    from app.embedding_pipeline.strategies import FixedSizeChunker
+
+    return FixedSizeChunker()
+
+
+def _recursive() -> Chunker:
+    from app.embedding_pipeline.strategies import RecursiveChunker
+
+    return RecursiveChunker()
+
+
+def _sentence_window() -> Chunker:
+    from app.embedding_pipeline.strategies import SentenceWindowChunker
+
+    return SentenceWindowChunker()
+
+
+def _semantic() -> Chunker:
+    from app.embedding_pipeline.strategies import SemanticChunker
+
+    settings = get_settings()
+    return SemanticChunker(api_key=settings.OPENAI_API_KEY, model=settings.EMBEDDING_MODEL)
+
+
+def _propositional() -> Chunker:
+    from app.embedding_pipeline.strategies import PropositionalChunker
+
+    client = get_openai_client()
+    if client is None:
+        raise RuntimeError("PropositionalChunker requires OPENAI_API_KEY.")
+    return PropositionalChunker(client=client)
+
+
+def _contextual_retrieval() -> Chunker:
+    from app.embedding_pipeline.strategies import ContextualRetrievalChunker
+
+    client = get_anthropic_client()
+    if client is None:
+        raise RuntimeError("ContextualRetrievalChunker requires ANTHROPIC_API_KEY.")
+    return ContextualRetrievalChunker(client=client)
+
+
+def _hierarchical() -> Chunker:
+    from app.embedding_pipeline.strategies import HierarchicalChunker
+
+    return HierarchicalChunker()
+
+
+# Order is the canonical comparison order used when no strategy is requested.
+CHUNKER_FACTORIES = {
+    "structural": get_chunker,
+    "fixed_size": _fixed_size,
+    "recursive": _recursive,
+    "sentence_window": _sentence_window,
+    "semantic": _semantic,
+    "propositional": _propositional,
+    "contextual_retrieval": _contextual_retrieval,
+    "hierarchical": _hierarchical,
+}
+ALL_STRATEGIES = list(CHUNKER_FACTORIES)
+
+
+def build_chunkers(names: list[str]) -> list[Chunker]:
+    """Raises ``KeyError`` for an unknown strategy, ``RuntimeError`` for a missing API key."""
+    chunkers: list[Chunker] = []
+    for name in names:
+        factory = CHUNKER_FACTORIES.get(name)
+        if factory is None:
+            raise KeyError(name)
+        chunkers.append(factory())
+    return chunkers
 
 
 def get_estimation_service() -> EstimationService:
