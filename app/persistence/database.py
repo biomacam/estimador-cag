@@ -59,7 +59,7 @@ def create_async_engine_from_settings() -> AsyncEngine:
 
 
 @lru_cache
-def _async_session_factory() -> async_sessionmaker[AsyncSession]:
+def get_async_session_factory() -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(
         bind=create_async_engine_from_settings(),
         autoflush=False,
@@ -69,5 +69,5 @@ def _async_session_factory() -> async_sessionmaker[AsyncSession]:
 
 async def get_async_session() -> AsyncIterator[AsyncSession]:
     """Yield an async session for transactional embedding ingestion."""
-    async with _async_session_factory()() as session:
+    async with get_async_session_factory()() as session:
         yield session

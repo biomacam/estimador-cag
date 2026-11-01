@@ -30,6 +30,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./data:/app/data
+      - ./scripts:/app/scripts
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
 
@@ -67,14 +68,24 @@ services:
     restart: unless-stopped
 
   postgres:
-    # pgvector image so a later migration can enable the extension without
-    # recreating the container; it is not activated yet.
+    # pgvector image; the 0002 migration activates the extension.
     image: pgvector/pgvector:pg16
     container_name: estimator-postgres
     environment:
       POSTGRES_USER: estimator
       POSTGRES_PASSWORD: estimator
       POSTGRES_DB: estimator
+    # Session 8: tuning for HNSW index builds (parallel builds use shared
+    # memory, hence shm_size). Conservative dev values; in production they
+    # scale with host RAM.
+    shm_size: 1gb
+    command: >
+      postgres
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c work_mem=64MB
+      -c maintenance_work_mem=512MB
+      -c max_parallel_maintenance_workers=2
     ports:
       - "5432:5432"
     volumes:
