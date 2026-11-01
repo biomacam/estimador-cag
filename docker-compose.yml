@@ -1,6 +1,10 @@
 # Docker Compose configuration for local development.
 # For production, remove the bind mount and the --reload flag.
 
+# Rails client (http://localhost:3000); calls this API at http://estimator:8000.
+include:
+  - estimator-web/docker-compose.yml
+
 services:
   estimator:
     build: .

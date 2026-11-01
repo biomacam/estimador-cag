@@ -10,26 +10,49 @@ Desde la carpeta del proyecto, crea `.env` si todavía no existe y añade la cla
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Arranca los servicios:
+Arranca los servicios desde la raíz del proyecto:
 
 ```powershell
 docker compose up -d --build
 docker compose ps
 ```
 
-Compose levanta `estimator`, `postgres` con pgvector, `redis` y `streamlit`. El servicio `estimator` aplica automáticamente las migraciones de Alembic al arrancar.
+El `docker-compose.yml` raíz incluye el cliente Rails (`estimator-web/docker-compose.yml`), así que Compose levanta seis servicios en la misma red:
 
+| Servicio | Qué es | Puerto host |
+|---|---|---|
+| `estimator` | API FastAPI; aplica las migraciones de Alembic al arrancar | 8000 |
+| `postgres` | PostgreSQL 16 + pgvector del servicio IA | 5432 |
+| `redis` | Redis Stack (caches; RedisInsight en 8001) | 6379, 8001 |
+| `streamlit` | Cliente Streamlit | 8501 |
+| `estimator-web` | Cliente Rails 8; llama a la API en `http://estimator:8000` | 3000 |
+| `web-postgres` | PostgreSQL 16 de Rails | 5433 |
+
+- Cliente Rails: http://localhost:3000 (healthcheck en `/up`)
 - Streamlit: http://localhost:8501
 - API y Swagger: http://localhost:8000/docs
 
-Para consultar la versión de PostgreSQL o los logs:
+El primer build de `estimator-web` compila gemas nativas y puede tardar varios minutos. Al arrancar, Rails ejecuta `db:prepare` sobre `web-postgres`. El `.env` de `estimator-web/` es opcional: el compose ya fija la URL de la API y la base de datos.
+
+Para levantar solo una parte, indica los servicios (Compose arranca también sus dependencias):
+
+```powershell
+docker compose up -d --build estimator              # solo el servicio IA (+ postgres y redis)
+docker compose up -d --build estimator estimator-web  # servicio IA + cliente Rails
+```
+
+Arranca siempre desde la raíz: lanzar `docker compose` desde `estimator-web/` crea otro proyecto Compose con volúmenes distintos y sin el servicio `estimator`.
+
+Para consultar PostgreSQL, los logs o ejecutar los tests de Rails:
 
 ```powershell
 docker compose exec postgres psql -U estimator -d estimator -c "SELECT version();"
-docker compose logs -f estimator
+docker compose exec web-postgres psql -U postgres estimator_web_development
+docker compose logs -f estimator estimator-web
+docker compose exec -e RAILS_ENV=test estimator-web bash -c "bin/rails db:prepare && bin/rails test"
 ```
 
-Detén los servicios con `docker compose down`. Esto conserva los datos del volumen de PostgreSQL.
+Detén los servicios con `docker compose down`. Esto conserva los datos de los volúmenes de PostgreSQL.
 
 ## Esquema de persistencia
 
