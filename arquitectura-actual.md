@@ -2,9 +2,9 @@
 
 Tres vistas de menor a mayor complejidad. Se omite Streamlit.
 
-**Alcance:** verde = implementado en `estimador-cag`; gris = cliente Rails existente en el proyecto vecino `ai-engineering/estimator-web`, mostrado solo como contexto de las dos primeras capas; amarillo = punto donde termina el flujo implementado. Las flechas entre Rails y la API representan el contrato HTTP, no una comprobacion de despliegue conjunto.
+**Alcance:** verde = implementado en `estimador-cag`; gris = cliente Rails , mostrado solo como contexto de las dos primeras capas; amarillo = punto donde termina el flujo implementado. Las flechas entre Rails y la API representan el contrato HTTP, no una comprobacion de despliegue conjunto.
 
-Los nombres solicitados son logicos: **`ingest/` corresponde a `app/ingestion/`** y **`storage/` corresponde a `app/persistence/`**. `embedding_pipeline/` existe como `app/embedding_pipeline/`. No se inventan directorios ni componentes pendientes.
+Los nombres solicitados son logicos: **`ingest/` corresponde a `app/ingestion/`** y **`storage/` corresponde a `app/persistence/`**. `embedding_pipeline/` existe como `app/embedding_pipeline/`. 
 
 ## 1. Diagrama de la arquitectura actual
 
@@ -195,7 +195,7 @@ flowchart TB
 
 ## 2. Trace anotado de una transcripción
 
-Trace manual de [02_ambiguous.txt](examples/transcripts/02_ambiguous.txt) a traves del sistema tal como esta hoy, ejecutado el 2026-11-01 con el script cliente [examples/trace_s09.py](examples/trace_s09.py) (copiado de `ai-engineering/examples/`; solo cambian las instrucciones de uso). El script no anade comportamiento al servicio: embebe la transcripcion y llama a `/search`.
+Trace manual de [02_ambiguous.txt](examples/transcripts/02_ambiguous.txt) a traves del sistema tal como esta hoy, ejecutado el 2026-11-01 con el script cliente [examples/trace_s09.py](examples/trace_s09.py) . El script no anade comportamiento al servicio: embebe la transcripcion y llama a `/search`.
 
 **Estado del sistema durante el trace:**
 
@@ -289,7 +289,7 @@ Respuesta cruda (`query` omitida, es la transcripcion completa):
 
 ### Paso 3 — Lectura de los chunks devueltos
 
-Necesidades de la transcripcion: (a) tienda online, (b) pago con tarjeta y recuperacion de carritos abandonados, (c) fidelizacion por puntos o club, (d) panel diario de pedidos, ventas y stock, (e) email de confirmacion del pedido. Cliente pequeno, sin equipo tecnico, mercado Espana con Francia como posibilidad.
+Necesidades de la transcripcion: (a) tienda online, (b) pago con tarjeta y recuperacion de carritos abandonados, (c) fidelizacion por puntos o club, (d) panel diario de pedidos, ventas y stock, (e) email de confirmacion del pedido. Cliente pequeno, sin equipo tecnico, mercado España con Francia como posibilidad.
 
 | Rank | Chunk (presupuesto historico) | Sector | ¿Relevante? |
 |---|---|---|---|
