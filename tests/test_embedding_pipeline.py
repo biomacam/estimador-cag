@@ -22,6 +22,7 @@ from app.embedding_pipeline.schemas import (
     SearchRequest,
     SearchResponse,
 )
+from app.embedding_pipeline.search import cosine_search_statement
 from app.persistence.database import get_async_session
 from app.persistence.models import ChunkRow, DocumentRow
 from app.main import app
@@ -548,6 +549,25 @@ def test_search_embeds_query_and_returns_cosine_nearest_chunks(client):
     assert " <=> " in sql
     assert "ORDER BY" in sql
     assert "LIMIT" in sql
+
+
+def test_chunks_ship_without_vector_index():
+    # Sequential scan is the baseline; HNSW is built live from scripts/sql_s08/.
+    index_columns = {col.name for index in ChunkRow.__table__.indexes for col in index.columns}
+    assert "embedding" not in index_columns
+    assert {index.name for index in ChunkRow.__table__.indexes} == {
+        "ix_chunks_document_id",
+        "ix_chunks_chunk_type",
+        "ix_chunks_metadata_gin",
+    }
+
+
+def test_hnsw_snippet_matches_search_operator():
+    sql_dir = Path(__file__).resolve().parents[1] / "scripts" / "sql_s08"
+    hnsw_sql = (sql_dir / "01_create_hnsw.sql").read_text(encoding="utf-8")
+    assert "USING hnsw (embedding vector_cosine_ops)" in hnsw_sql
+    statement = cosine_search_statement([0.0] * 1536, 5)
+    assert " <=> " in str(statement.compile(dialect=postgresql.dialect()))
 
 
 def test_search_request_requires_positive_k():

@@ -1,0 +1,30 @@
+Rails.application.routes.draw do
+  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
+
+  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
+  # Can be used by load balancers and uptime monitors to verify that the app is live.
+  get "up" => "rails/health#show", as: :rails_health_check
+
+  # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
+  # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
+  # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
+
+  resources :estimations, only: [ :index, :new, :create, :show ]
+
+  # Session 5 conversational flow. ``create`` is bound to a specific session
+  # (POST /chat_sessions/:id) — :new creates the underlying session lazily
+  # when the page first loads.
+  resources :chat_sessions, only: [ :new, :show, :destroy ] do
+    member do
+      post :create
+    end
+  end
+
+  # Session 7 RAG context: chunking strategy comparison lab.
+  namespace :rag do
+    resources :chunking_comparisons, only: [ :index, :new, :create, :show ]
+  end
+
+  # Landing dashboard: one card per context of the Master's journey.
+  root "home#index"
+end
