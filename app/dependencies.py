@@ -15,12 +15,16 @@ from app.embedding_pipeline.embedder import OpenAIEmbedder
 from app.ingestion.catalog import DataCatalog, load_catalog
 from app.ingestion.loaders.filesystem import FileSystemLoader
 from app.ingestion.parsers.registry import ParserRegistry, default_registry
+from app.rag.runtime_config import RuntimeRetrievalConfig
+from app.rag.store import ChunkStore
 from app.services.cache import EstimationCache
 from app.services.llm_wrapper import LLMConfigurationError, LLMWrapper
 from app.sessions import SessionStore
 
 if TYPE_CHECKING:
     from app.cache.semantic import EstimationSemanticCache
+    from app.rag.idempotency import IdempotencyStore
+    from app.rag.retrieval.reranker import CrossEncoderReranker
     from app.services.llm_service import EstimationService
 
 log = structlog.get_logger()
@@ -51,6 +55,43 @@ def get_embedder() -> OpenAIEmbedder | None:
         log.warning("embedder_disabled", reason="no_openai_key")
         return None
     return OpenAIEmbedder(client=client, model=settings.EMBEDDING_MODEL)
+
+
+@lru_cache
+def get_chunk_store() -> ChunkStore:
+    """Stateless data-access layer for filtered and lexical chunk search."""
+    return ChunkStore()
+
+
+@lru_cache
+def get_idempotency_store() -> IdempotencyStore:
+    """Idempotency cache for the estimate endpoint (Redis, else in-process dict)."""
+    from app.rag.idempotency import IdempotencyStore
+
+    return IdempotencyStore.from_settings(get_settings())
+
+
+@lru_cache
+def get_token_encoder():
+    """tiktoken ``cl100k_base`` encoder used for the context token budget."""
+    import tiktoken
+
+    return tiktoken.get_encoding("cl100k_base")
+
+
+@lru_cache
+def get_runtime_retrieval_config() -> RuntimeRetrievalConfig:
+    """Redis-backed override store for search mode + reranking, read on every call."""
+    settings = get_settings()
+    return RuntimeRetrievalConfig.from_url(settings.REDIS_URL, settings)
+
+
+@lru_cache
+def get_reranker() -> CrossEncoderReranker:
+    """Cross-encoder singleton; the model loads lazily on the first rerank."""
+    from app.rag.retrieval.reranker import CrossEncoderReranker
+
+    return CrossEncoderReranker.from_settings()
 
 
 @lru_cache

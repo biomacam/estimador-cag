@@ -60,3 +60,21 @@ def test_default_pseudonym_salt_is_rejected_in_production() -> None:
 def test_custom_pseudonym_salt_is_accepted_in_production() -> None:
     settings = Settings(_env_file=None, APP_ENV="production", PSEUDONYM_HASH_SALT="s3cret")
     assert settings.APP_ENV == "production"
+
+
+@pytest.mark.parametrize("rrf_k", [0, -1])
+def test_rrf_smoothing_must_be_positive(rrf_k: int) -> None:
+    with pytest.raises(ValidationError, match="RRF_K"):
+        Settings(_env_file=None, RRF_K=rrf_k)
+
+
+@pytest.mark.parametrize("field", ["RETRIEVAL_RECALL_TOP_K", "RERANK_TOP_N"])
+@pytest.mark.parametrize("value", [0, -1])
+def test_recall_and_rerank_limits_must_be_positive(field: str, value: int) -> None:
+    with pytest.raises(ValidationError, match=field):
+        Settings(_env_file=None, **{field: value})
+
+
+def test_recall_then_rerank_defaults_are_50_to_5() -> None:
+    assert Settings.model_fields["RETRIEVAL_RECALL_TOP_K"].default == 50
+    assert Settings.model_fields["RERANK_TOP_N"].default == 5

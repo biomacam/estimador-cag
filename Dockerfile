@@ -51,8 +51,11 @@ COPY scripts/ /app/scripts/
 # so the same image can run either the API (default CMD) or the client.
 COPY streamlit_app.py /app/streamlit_app.py
 
-# Ensure the non-root user owns everything it needs to run.
-RUN chown -R appuser:appgroup /app
+# Ensure the non-root user owns everything it needs to run. The HuggingFace cache dir
+# exists in the image so a named volume mounted there inherits appuser ownership
+# (reranker weights download here on first use).
+RUN mkdir -p /home/appuser/.cache/huggingface && \
+    chown -R appuser:appgroup /app /home/appuser/.cache
 
 # Put the virtual environment's bin directory first on PATH so `python` and
 # `uvicorn` resolve to the versions installed inside the venv.

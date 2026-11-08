@@ -56,7 +56,7 @@ async def ingest_document(
                 [
                     ChunkRow(
                         document_id=document.id,
-                        chunk_type="budget_component",
+                        chunk_type=request.chunk_type,
                         content=chunk.text,
                         embedding=embedded.embedding,
                         metadata_json=chunk.metadata,

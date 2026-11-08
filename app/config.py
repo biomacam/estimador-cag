@@ -73,6 +73,34 @@ class Settings(BaseSettings):
     # HMAC salt behind pseudonym_mappings.original_hash; rotating it invalidates all mappings.
     PSEUDONYM_HASH_SALT: str = "change-me-in-prod"
 
+    # --- RAG estimation (transcript -> grounded estimate) ---
+    # Reformulation distills a transcript (small model); generation reasons over the
+    # retrieved budgets (strongest model). Both go through LLMWrapper.
+    REFORMULATION_MODEL: str = "gpt-5-mini"
+    GENERATION_MODEL: str = "gpt-5"
+    GENERATION_REASONING_EFFORT: Literal["minimal", "low", "medium", "high"] = "high"
+    # Reasoning tokens count against this cap, so the 4000 wrapper default would
+    # truncate the nested modules->tasks JSON. A cap, not a target.
+    GENERATION_MAX_TOKENS: int = 64000
+    RETRIEVAL_TOP_K: int = 10
+    RETRIEVAL_DISTANCE_THRESHOLD: float = 0.6
+    # Token budget for the assembled <source> block (tiktoken cl100k_base).
+    MAX_CONTEXT_TOKENS: int = 16384
+    IDEMPOTENCY_TTL: int = 86400
+    # Independent keys (header X-API-Key) for the retrieval and estimate routers;
+    # None disables the router (401 on every request).
+    RETRIEVAL_API_KEY: str | None = None
+    ESTIMATE_API_KEY: str | None = None
+
+    # --- Hybrid search + cross-encoder reranking ---
+    RETRIEVAL_SEARCH_MODE: Literal["vector", "hybrid"] = "vector"
+    RERANKER_ENABLED: bool = True
+    RERANKER_MODEL: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    # Candidates recalled before fusion/reranking, and the cut after reranking.
+    RETRIEVAL_RECALL_TOP_K: int = Field(default=50, gt=0)
+    RERANK_TOP_N: int = Field(default=5, gt=0)
+    RRF_K: int = Field(default=60, gt=0)
+
     @model_validator(mode="after")
     def _salt_must_be_set_in_production(self) -> "Settings":
         if self.APP_ENV == "production" and self.PSEUDONYM_HASH_SALT == "change-me-in-prod":

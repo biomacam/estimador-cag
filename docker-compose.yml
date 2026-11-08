@@ -37,6 +37,8 @@ services:
       - ./scripts:/app/scripts
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
+      # Cross-encoder weights (~450MB) survive container recreation.
+      - hf_cache:/home/appuser/.cache/huggingface
 
     # Apply pending migrations, then run uvicorn with auto-reload.
     # Remove --reload for production deployments.
@@ -138,3 +140,4 @@ services:
 volumes:
   redis_data:
   estimator_postgres_data:
+  hf_cache:

@@ -1,0 +1,2915 @@
+[
+  {
+    "budget_id": "TASK-2022-0001",
+    "client_metadata": {
+      "name": "TiendaUno S.L.",
+      "sector": "ecommerce",
+      "country": "ES"
+    },
+    "project_summary": "Ecommerce platform covering catalog & search, checkout & cart, qa & testing",
+    "main_technology": "django",
+    "year": 2022,
+    "total_estimated_hours": 711,
+    "components": [
+      {
+        "component_id": "CAT-001",
+        "name": "Faceted search",
+        "description": "Search with filters, facets and relevance tuning.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "elasticsearch"
+        ],
+        "estimated_hours": 55,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "CAT-002",
+        "name": "Product catalog model",
+        "description": "Categories, variants and inventory tracking.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-001",
+        "name": "Order management",
+        "description": "Order lifecycle, fulfilment and returns.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 38,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-002",
+        "name": "Promotions & coupons",
+        "description": "Discount rules, coupons and loyalty points.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 33,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-003",
+        "name": "Cart & checkout flow",
+        "description": "Cart, address, shipping and payment steps.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 28,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 19,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 24,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-003",
+        "name": "Load & performance testing",
+        "description": "Throughput and latency benchmarks under load.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "k6"
+        ],
+        "estimated_hours": 19,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "kms",
+          "python"
+        ],
+        "estimated_hours": 22,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Audit logging",
+        "description": "Tamper-evident audit trail of sensitive operations.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 23,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-003",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 37,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 26,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 58,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Form flows & validation",
+        "description": "Multi-step forms with client and server validation.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react",
+          "typescript"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Core SPA scaffolding",
+        "description": "App shell, routing, state management and design system.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 27,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "grafana"
+        ],
+        "estimated_hours": 22,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "Container orchestration",
+        "description": "Kubernetes manifests, autoscaling and rollout strategy.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker",
+          "kubernetes"
+        ],
+        "estimated_hours": 42,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Third-party API integration",
+        "description": "Resilient client with retries, backoff and idempotency.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "httpx"
+        ],
+        "estimated_hours": 36,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "ETL / data sync job",
+        "description": "Scheduled extract-transform-load between systems.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "airflow",
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 31,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-003",
+        "name": "Webhook ingestion",
+        "description": "Signed-webhook receiver with replay protection.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 24,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "Password & MFA flows",
+        "description": "Reset, lockout and TOTP-based multi-factor authentication.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python",
+          "redis"
+        ],
+        "estimated_hours": 22,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "SSO integration",
+        "description": "SAML/OIDC single sign-on against the client identity provider.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python",
+          "saml"
+        ],
+        "estimated_hours": 25,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-003",
+        "name": "OAuth2 / OIDC login",
+        "description": "Authorization-code flow with refresh tokens and session handling.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "redis"
+        ],
+        "estimated_hours": 26,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-004",
+        "name": "Role-based access control",
+        "description": "Roles, permissions and policy checks across the API.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 18,
+        "complexity": "medium",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2025-0002",
+    "client_metadata": {
+      "name": "MaqExpert S.L.",
+      "sector": "industrial",
+      "country": "US"
+    },
+    "project_summary": "Industrial platform covering telemetry & iot, operations, authentication & access",
+    "main_technology": "java_spring",
+    "year": 2025,
+    "total_estimated_hours": 610,
+    "components": [
+      {
+        "component_id": "IOT-001",
+        "name": "Time-series storage",
+        "description": "Downsampling and retention of time-series data.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "timescaledb"
+        ],
+        "estimated_hours": 23,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "IOT-002",
+        "name": "Device telemetry ingestion",
+        "description": "High-throughput sensor data ingestion.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "python",
+          "kafka"
+        ],
+        "estimated_hours": 58,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-001",
+        "name": "Predictive maintenance",
+        "description": "Anomaly detection on equipment signals.",
+        "module": "Operations",
+        "tech_stack": [
+          "python",
+          "scikit_learn"
+        ],
+        "estimated_hours": 37,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-002",
+        "name": "Production scheduling",
+        "description": "Job scheduling and shop-floor sequencing.",
+        "module": "Operations",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 54,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "SSO integration",
+        "description": "SAML/OIDC single sign-on against the client identity provider.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "saml"
+        ],
+        "estimated_hours": 27,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "OAuth2 / OIDC login",
+        "description": "Authorization-code flow with refresh tokens and session handling.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 27,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-003",
+        "name": "Role-based access control",
+        "description": "Roles, permissions and policy checks across the API.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python",
+          "postgresql"
+        ],
+        "estimated_hours": 16,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-004",
+        "name": "Password & MFA flows",
+        "description": "Reset, lockout and TOTP-based multi-factor authentication.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "redis"
+        ],
+        "estimated_hours": 17,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "prometheus",
+          "grafana"
+        ],
+        "estimated_hours": 25,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "terraform",
+          "aws"
+        ],
+        "estimated_hours": 36,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Third-party API integration",
+        "description": "Resilient client with retries, backoff and idempotency.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "httpx",
+          "python"
+        ],
+        "estimated_hours": 32,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "Reporting data model",
+        "description": "Star-schema tables and aggregation views for analytics.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "dbt"
+        ],
+        "estimated_hours": 32,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-003",
+        "name": "ETL / data sync job",
+        "description": "Scheduled extract-transform-load between systems.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "airflow"
+        ],
+        "estimated_hours": 41,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-004",
+        "name": "Webhook ingestion",
+        "description": "Signed-webhook receiver with replay protection.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python",
+          "redis"
+        ],
+        "estimated_hours": 21,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 34,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "Load & performance testing",
+        "description": "Throughput and latency benchmarks under load.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "k6"
+        ],
+        "estimated_hours": 21,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-003",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 31,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "kms"
+        ],
+        "estimated_hours": 14,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Audit logging",
+        "description": "Tamper-evident audit trail of sensitive operations.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 28,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-003",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 36,
+        "complexity": "high",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2025-0003",
+    "client_metadata": {
+      "name": "PlantaCore SAS",
+      "sector": "industrial",
+      "country": "US"
+    },
+    "project_summary": "Industrial platform covering telemetry & iot, operations, data & integrations",
+    "main_technology": "java_spring",
+    "year": 2025,
+    "total_estimated_hours": 575,
+    "components": [
+      {
+        "component_id": "IOT-001",
+        "name": "Device telemetry ingestion",
+        "description": "High-throughput sensor data ingestion.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "python",
+          "kafka"
+        ],
+        "estimated_hours": 38,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "IOT-002",
+        "name": "Time-series storage",
+        "description": "Downsampling and retention of time-series data.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "timescaledb"
+        ],
+        "estimated_hours": 25,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-001",
+        "name": "Production scheduling",
+        "description": "Job scheduling and shop-floor sequencing.",
+        "module": "Operations",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 29,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-002",
+        "name": "Predictive maintenance",
+        "description": "Anomaly detection on equipment signals.",
+        "module": "Operations",
+        "tech_stack": [
+          "scikit_learn"
+        ],
+        "estimated_hours": 33,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Webhook ingestion",
+        "description": "Signed-webhook receiver with replay protection.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 17,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "ETL / data sync job",
+        "description": "Scheduled extract-transform-load between systems.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "postgresql",
+          "python",
+          "airflow"
+        ],
+        "estimated_hours": 45,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 41,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 20,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-003",
+        "name": "Load & performance testing",
+        "description": "Throughput and latency benchmarks under load.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "k6"
+        ],
+        "estimated_hours": 14,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 33,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "kms",
+          "python"
+        ],
+        "estimated_hours": 20,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 52,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 25,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Accessibility & i18n",
+        "description": "WCAG pass and internationalisation of the UI.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 13,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Form flows & validation",
+        "description": "Multi-step forms with client and server validation.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react",
+          "typescript"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-003",
+        "name": "Core SPA scaffolding",
+        "description": "App shell, routing, state management and design system.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 25,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-004",
+        "name": "Dashboard & charts",
+        "description": "Operational dashboard with filters and exportable charts.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 55,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "prometheus",
+          "grafana"
+        ],
+        "estimated_hours": 24,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "terraform",
+          "aws"
+        ],
+        "estimated_hours": 36,
+        "complexity": "high",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2022-0004",
+    "client_metadata": {
+      "name": "NordBank GmbH",
+      "sector": "finance",
+      "country": "DE"
+    },
+    "project_summary": "Finance platform covering payments & billing, regulatory reporting, data & integrations",
+    "main_technology": "ruby_on_rails",
+    "year": 2022,
+    "total_estimated_hours": 523,
+    "components": [
+      {
+        "component_id": "PAY-001",
+        "name": "Ledger & reconciliation",
+        "description": "Double-entry ledger and daily reconciliation.",
+        "module": "Payments & Billing",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 47,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "PAY-002",
+        "name": "Payment gateway integration",
+        "description": "Card payments via a PSP with 3-D Secure.",
+        "module": "Payments & Billing",
+        "tech_stack": [
+          "python",
+          "stripe"
+        ],
+        "estimated_hours": 41,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "REG-001",
+        "name": "Regulatory report export",
+        "description": "Scheduled regulator-format report generation.",
+        "module": "Regulatory Reporting",
+        "tech_stack": [
+          "python",
+          "postgresql"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "REG-002",
+        "name": "KYC / AML onboarding",
+        "description": "Identity verification and sanction-list screening.",
+        "module": "Regulatory Reporting",
+        "tech_stack": [
+          "onfido"
+        ],
+        "estimated_hours": 44,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "ETL / data sync job",
+        "description": "Scheduled extract-transform-load between systems.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python",
+          "airflow"
+        ],
+        "estimated_hours": 45,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "Webhook ingestion",
+        "description": "Signed-webhook receiver with replay protection.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python",
+          "redis"
+        ],
+        "estimated_hours": 23,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-003",
+        "name": "Third-party API integration",
+        "description": "Resilient client with retries, backoff and idempotency.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "httpx"
+        ],
+        "estimated_hours": 33,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "OAuth2 / OIDC login",
+        "description": "Authorization-code flow with refresh tokens and session handling.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python",
+          "redis"
+        ],
+        "estimated_hours": 29,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "SSO integration",
+        "description": "SAML/OIDC single sign-on against the client identity provider.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "saml"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-003",
+        "name": "Password & MFA flows",
+        "description": "Reset, lockout and TOTP-based multi-factor authentication.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "redis"
+        ],
+        "estimated_hours": 27,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "prometheus"
+        ],
+        "estimated_hours": 29,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "CI/CD pipeline",
+        "description": "Build, test and deploy pipeline with environments.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker",
+          "github_actions"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 24,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Audit logging",
+        "description": "Tamper-evident audit trail of sensitive operations.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 24,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 37,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 38,
+        "complexity": "low",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2023-0005",
+    "client_metadata": {
+      "name": "MaqExpert S.L.",
+      "sector": "industrial",
+      "country": "US"
+    },
+    "project_summary": "Industrial platform covering telemetry & iot, operations, frontend / ux",
+    "main_technology": "java_spring",
+    "year": 2023,
+    "total_estimated_hours": 509,
+    "components": [
+      {
+        "component_id": "IOT-001",
+        "name": "Time-series storage",
+        "description": "Downsampling and retention of time-series data.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "timescaledb"
+        ],
+        "estimated_hours": 36,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "IOT-002",
+        "name": "Device telemetry ingestion",
+        "description": "High-throughput sensor data ingestion.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "python",
+          "kafka"
+        ],
+        "estimated_hours": 53,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-001",
+        "name": "Predictive maintenance",
+        "description": "Anomaly detection on equipment signals.",
+        "module": "Operations",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 42,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-002",
+        "name": "Production scheduling",
+        "description": "Job scheduling and shop-floor sequencing.",
+        "module": "Operations",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 43,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Dashboard & charts",
+        "description": "Operational dashboard with filters and exportable charts.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react"
+        ],
+        "estimated_hours": 56,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Accessibility & i18n",
+        "description": "WCAG pass and internationalisation of the UI.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 16,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-003",
+        "name": "Form flows & validation",
+        "description": "Multi-step forms with client and server validation.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react"
+        ],
+        "estimated_hours": 23,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "CI/CD pipeline",
+        "description": "Build, test and deploy pipeline with environments.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker"
+        ],
+        "estimated_hours": 32,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "terraform"
+        ],
+        "estimated_hours": 28,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-003",
+        "name": "Container orchestration",
+        "description": "Kubernetes manifests, autoscaling and rollout strategy.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker",
+          "kubernetes"
+        ],
+        "estimated_hours": 49,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 41,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 21,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "kms"
+        ],
+        "estimated_hours": 31,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Audit logging",
+        "description": "Tamper-evident audit trail of sensitive operations.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 18,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-003",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 20,
+        "complexity": "high",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2025-0006",
+    "client_metadata": {
+      "name": "PlantaCore SAS",
+      "sector": "industrial",
+      "country": "US"
+    },
+    "project_summary": "Industrial platform covering telemetry & iot, operations, frontend / ux",
+    "main_technology": "java_spring",
+    "year": 2025,
+    "total_estimated_hours": 566,
+    "components": [
+      {
+        "component_id": "IOT-001",
+        "name": "Device telemetry ingestion",
+        "description": "High-throughput sensor data ingestion.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 57,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "IOT-002",
+        "name": "Time-series storage",
+        "description": "Downsampling and retention of time-series data.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "timescaledb"
+        ],
+        "estimated_hours": 27,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-001",
+        "name": "Predictive maintenance",
+        "description": "Anomaly detection on equipment signals.",
+        "module": "Operations",
+        "tech_stack": [
+          "scikit_learn",
+          "python"
+        ],
+        "estimated_hours": 31,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-002",
+        "name": "Production scheduling",
+        "description": "Job scheduling and shop-floor sequencing.",
+        "module": "Operations",
+        "tech_stack": [
+          "python",
+          "postgresql"
+        ],
+        "estimated_hours": 44,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Dashboard & charts",
+        "description": "Operational dashboard with filters and exportable charts.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react",
+          "typescript",
+          "d3"
+        ],
+        "estimated_hours": 38,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Core SPA scaffolding",
+        "description": "App shell, routing, state management and design system.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript",
+          "react"
+        ],
+        "estimated_hours": 36,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-003",
+        "name": "Form flows & validation",
+        "description": "Multi-step forms with client and server validation.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react"
+        ],
+        "estimated_hours": 23,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "aws"
+        ],
+        "estimated_hours": 31,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "prometheus"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-003",
+        "name": "Container orchestration",
+        "description": "Kubernetes manifests, autoscaling and rollout strategy.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker",
+          "kubernetes"
+        ],
+        "estimated_hours": 49,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-004",
+        "name": "CI/CD pipeline",
+        "description": "Build, test and deploy pipeline with environments.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "github_actions"
+        ],
+        "estimated_hours": 33,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 47,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 39,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "Load & performance testing",
+        "description": "Throughput and latency benchmarks under load.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "k6"
+        ],
+        "estimated_hours": 24,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 27,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-003",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2023-0007",
+    "client_metadata": {
+      "name": "IndusTech Inc.",
+      "sector": "industrial",
+      "country": "US"
+    },
+    "project_summary": "Industrial platform covering telemetry & iot, operations, infrastructure & devops",
+    "main_technology": "java_spring",
+    "year": 2023,
+    "total_estimated_hours": 552,
+    "components": [
+      {
+        "component_id": "IOT-001",
+        "name": "Device telemetry ingestion",
+        "description": "High-throughput sensor data ingestion.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "python",
+          "kafka"
+        ],
+        "estimated_hours": 50,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "IOT-002",
+        "name": "Time-series storage",
+        "description": "Downsampling and retention of time-series data.",
+        "module": "Telemetry & IoT",
+        "tech_stack": [
+          "timescaledb"
+        ],
+        "estimated_hours": 17,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-001",
+        "name": "Predictive maintenance",
+        "description": "Anomaly detection on equipment signals.",
+        "module": "Operations",
+        "tech_stack": [
+          "python",
+          "scikit_learn"
+        ],
+        "estimated_hours": 42,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "OPS-002",
+        "name": "Production scheduling",
+        "description": "Job scheduling and shop-floor sequencing.",
+        "module": "Operations",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 36,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "Container orchestration",
+        "description": "Kubernetes manifests, autoscaling and rollout strategy.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "kubernetes"
+        ],
+        "estimated_hours": 25,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "terraform"
+        ],
+        "estimated_hours": 36,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Reporting data model",
+        "description": "Star-schema tables and aggregation views for analytics.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "dbt"
+        ],
+        "estimated_hours": 35,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "Third-party API integration",
+        "description": "Resilient client with retries, backoff and idempotency.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python",
+          "httpx"
+        ],
+        "estimated_hours": 35,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 53,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "Load & performance testing",
+        "description": "Throughput and latency benchmarks under load.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "k6"
+        ],
+        "estimated_hours": 25,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-003",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 18,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "Password & MFA flows",
+        "description": "Reset, lockout and TOTP-based multi-factor authentication.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "redis",
+          "python"
+        ],
+        "estimated_hours": 28,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "Role-based access control",
+        "description": "Roles, permissions and policy checks across the API.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 32,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-003",
+        "name": "OAuth2 / OIDC login",
+        "description": "Authorization-code flow with refresh tokens and session handling.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "postgresql",
+          "redis",
+          "python"
+        ],
+        "estimated_hours": 28,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 40,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 52,
+        "complexity": "low",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2025-0008",
+    "client_metadata": {
+      "name": "ShopHub S.L.",
+      "sector": "ecommerce",
+      "country": "ES"
+    },
+    "project_summary": "Ecommerce platform covering catalog & search, checkout & cart, authentication & access",
+    "main_technology": "django",
+    "year": 2025,
+    "total_estimated_hours": 714,
+    "components": [
+      {
+        "component_id": "CAT-001",
+        "name": "Faceted search",
+        "description": "Search with filters, facets and relevance tuning.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "elasticsearch"
+        ],
+        "estimated_hours": 34,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "CAT-002",
+        "name": "Product catalog model",
+        "description": "Categories, variants and inventory tracking.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "python",
+          "postgresql"
+        ],
+        "estimated_hours": 31,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-001",
+        "name": "Order management",
+        "description": "Order lifecycle, fulfilment and returns.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 35,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-002",
+        "name": "Cart & checkout flow",
+        "description": "Cart, address, shipping and payment steps.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "stripe",
+          "typescript",
+          "react"
+        ],
+        "estimated_hours": 37,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-003",
+        "name": "Promotions & coupons",
+        "description": "Discount rules, coupons and loyalty points.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "redis",
+          "python"
+        ],
+        "estimated_hours": 33,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "Role-based access control",
+        "description": "Roles, permissions and policy checks across the API.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "OAuth2 / OIDC login",
+        "description": "Authorization-code flow with refresh tokens and session handling.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python",
+          "redis",
+          "postgresql"
+        ],
+        "estimated_hours": 55,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "aws"
+        ],
+        "estimated_hours": 48,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "grafana",
+          "prometheus"
+        ],
+        "estimated_hours": 23,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-003",
+        "name": "CI/CD pipeline",
+        "description": "Build, test and deploy pipeline with environments.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker"
+        ],
+        "estimated_hours": 20,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Webhook ingestion",
+        "description": "Signed-webhook receiver with replay protection.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 16,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "ETL / data sync job",
+        "description": "Scheduled extract-transform-load between systems.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 50,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "Load & performance testing",
+        "description": "Throughput and latency benchmarks under load.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "k6"
+        ],
+        "estimated_hours": 20,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 34,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-003",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 46,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 22,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 45,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Form flows & validation",
+        "description": "Multi-step forms with client and server validation.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 32,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Dashboard & charts",
+        "description": "Operational dashboard with filters and exportable charts.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react"
+        ],
+        "estimated_hours": 34,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 21,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Audit logging",
+        "description": "Tamper-evident audit trail of sensitive operations.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-003",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "kms",
+          "python"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2024-0009",
+    "client_metadata": {
+      "name": "ShopHub S.L.",
+      "sector": "ecommerce",
+      "country": "ES"
+    },
+    "project_summary": "Ecommerce platform covering catalog & search, checkout & cart, data & integrations",
+    "main_technology": "django",
+    "year": 2024,
+    "total_estimated_hours": 689,
+    "components": [
+      {
+        "component_id": "CAT-001",
+        "name": "Product catalog model",
+        "description": "Categories, variants and inventory tracking.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 36,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CAT-002",
+        "name": "Faceted search",
+        "description": "Search with filters, facets and relevance tuning.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "elasticsearch"
+        ],
+        "estimated_hours": 47,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-001",
+        "name": "Cart & checkout flow",
+        "description": "Cart, address, shipping and payment steps.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "react",
+          "stripe"
+        ],
+        "estimated_hours": 50,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-002",
+        "name": "Order management",
+        "description": "Order lifecycle, fulfilment and returns.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Webhook ingestion",
+        "description": "Signed-webhook receiver with replay protection.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "redis",
+          "python"
+        ],
+        "estimated_hours": 21,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "Reporting data model",
+        "description": "Star-schema tables and aggregation views for analytics.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "dbt"
+        ],
+        "estimated_hours": 16,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-003",
+        "name": "ETL / data sync job",
+        "description": "Scheduled extract-transform-load between systems.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 47,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-004",
+        "name": "Third-party API integration",
+        "description": "Resilient client with retries, backoff and idempotency.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python",
+          "httpx"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "SSO integration",
+        "description": "SAML/OIDC single sign-on against the client identity provider.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "saml"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "Password & MFA flows",
+        "description": "Reset, lockout and TOTP-based multi-factor authentication.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 15,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 25,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 47,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Form flows & validation",
+        "description": "Multi-step forms with client and server validation.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react",
+          "typescript"
+        ],
+        "estimated_hours": 19,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Core SPA scaffolding",
+        "description": "App shell, routing, state management and design system.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 27,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-003",
+        "name": "Accessibility & i18n",
+        "description": "WCAG pass and internationalisation of the UI.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 24,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-004",
+        "name": "Dashboard & charts",
+        "description": "Operational dashboard with filters and exportable charts.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "d3",
+          "typescript"
+        ],
+        "estimated_hours": 29,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "aws",
+          "terraform"
+        ],
+        "estimated_hours": 39,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "grafana",
+          "prometheus"
+        ],
+        "estimated_hours": 19,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 26,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 40,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Audit logging",
+        "description": "Tamper-evident audit trail of sensitive operations.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 13,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 37,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-003",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "kms",
+          "python"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2025-0010",
+    "client_metadata": {
+      "name": "ClinicaPlus GmbH",
+      "sector": "healthcare",
+      "country": "FR"
+    },
+    "project_summary": "Healthcare platform covering clinical records, scheduling, data & integrations",
+    "main_technology": "python_fastapi",
+    "year": 2025,
+    "total_estimated_hours": 616,
+    "components": [
+      {
+        "component_id": "EHR-001",
+        "name": "HL7 / FHIR integration",
+        "description": "Interoperability with hospital systems via FHIR.",
+        "module": "Clinical Records",
+        "tech_stack": [
+          "fhir",
+          "python"
+        ],
+        "estimated_hours": 53,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "EHR-002",
+        "name": "Patient records (EHR)",
+        "description": "Encrypted patient records with access controls.",
+        "module": "Clinical Records",
+        "tech_stack": [
+          "python",
+          "postgresql"
+        ],
+        "estimated_hours": 37,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SCH-001",
+        "name": "Telemedicine session",
+        "description": "Video consultation with waiting room.",
+        "module": "Scheduling",
+        "tech_stack": [
+          "webrtc",
+          "typescript"
+        ],
+        "estimated_hours": 35,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SCH-002",
+        "name": "Appointment scheduling",
+        "description": "Calendars, availability and reminders.",
+        "module": "Scheduling",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 35,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Third-party API integration",
+        "description": "Resilient client with retries, backoff and idempotency.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 38,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "Webhook ingestion",
+        "description": "Signed-webhook receiver with replay protection.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "python",
+          "redis"
+        ],
+        "estimated_hours": 15,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 33,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "kms"
+        ],
+        "estimated_hours": 29,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 43,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "Load & performance testing",
+        "description": "Throughput and latency benchmarks under load.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "k6"
+        ],
+        "estimated_hours": 19,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-003",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 36,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "Observability stack",
+        "description": "Structured logs, metrics and alerting.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "grafana"
+        ],
+        "estimated_hours": 26,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "CI/CD pipeline",
+        "description": "Build, test and deploy pipeline with environments.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker",
+          "github_actions"
+        ],
+        "estimated_hours": 16,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-003",
+        "name": "IaC provisioning",
+        "description": "Infrastructure-as-code for the cloud footprint.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "aws"
+        ],
+        "estimated_hours": 42,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-004",
+        "name": "Container orchestration",
+        "description": "Kubernetes manifests, autoscaling and rollout strategy.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "kubernetes"
+        ],
+        "estimated_hours": 47,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 51,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 19,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "Password & MFA flows",
+        "description": "Reset, lockout and TOTP-based multi-factor authentication.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python",
+          "redis"
+        ],
+        "estimated_hours": 21,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "Role-based access control",
+        "description": "Roles, permissions and policy checks across the API.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 21,
+        "complexity": "medium",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2022-0011",
+    "client_metadata": {
+      "name": "TiendaUno Inc.",
+      "sector": "ecommerce",
+      "country": "ES"
+    },
+    "project_summary": "Ecommerce platform covering catalog & search, checkout & cart, authentication & access",
+    "main_technology": "django",
+    "year": 2022,
+    "total_estimated_hours": 463,
+    "components": [
+      {
+        "component_id": "CAT-001",
+        "name": "Faceted search",
+        "description": "Search with filters, facets and relevance tuning.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "elasticsearch"
+        ],
+        "estimated_hours": 39,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "CAT-002",
+        "name": "Product catalog model",
+        "description": "Categories, variants and inventory tracking.",
+        "module": "Catalog & Search",
+        "tech_stack": [
+          "postgresql",
+          "python"
+        ],
+        "estimated_hours": 31,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-001",
+        "name": "Cart & checkout flow",
+        "description": "Cart, address, shipping and payment steps.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "typescript",
+          "stripe"
+        ],
+        "estimated_hours": 43,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-002",
+        "name": "Promotions & coupons",
+        "description": "Discount rules, coupons and loyalty points.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "redis"
+        ],
+        "estimated_hours": 21,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "CHK-003",
+        "name": "Order management",
+        "description": "Order lifecycle, fulfilment and returns.",
+        "module": "Checkout & Cart",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 28,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "OAuth2 / OIDC login",
+        "description": "Authorization-code flow with refresh tokens and session handling.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "redis",
+          "postgresql"
+        ],
+        "estimated_hours": 54,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "SSO integration",
+        "description": "SAML/OIDC single sign-on against the client identity provider.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 21,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-001",
+        "name": "Pentest remediation",
+        "description": "Fixing findings from a third-party security review.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 29,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-002",
+        "name": "Data encryption",
+        "description": "Encryption at rest and in transit, key rotation.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 17,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SEC-003",
+        "name": "Audit logging",
+        "description": "Tamper-evident audit trail of sensitive operations.",
+        "module": "Security & Compliance",
+        "tech_stack": [
+          "postgresql"
+        ],
+        "estimated_hours": 17,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Accessibility & i18n",
+        "description": "WCAG pass and internationalisation of the UI.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 21,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Dashboard & charts",
+        "description": "Operational dashboard with filters and exportable charts.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 32,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-003",
+        "name": "Core SPA scaffolding",
+        "description": "App shell, routing, state management and design system.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript",
+          "react"
+        ],
+        "estimated_hours": 31,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-004",
+        "name": "Form flows & validation",
+        "description": "Multi-step forms with client and server validation.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "react",
+          "typescript"
+        ],
+        "estimated_hours": 31,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 19,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 29,
+        "complexity": "medium",
+        "dependencies": []
+      }
+    ]
+  },
+  {
+    "budget_id": "TASK-2025-0012",
+    "client_metadata": {
+      "name": "VitalCare Inc.",
+      "sector": "healthcare",
+      "country": "FR"
+    },
+    "project_summary": "Healthcare platform covering clinical records, scheduling, qa & testing",
+    "main_technology": "python_fastapi",
+    "year": 2025,
+    "total_estimated_hours": 554,
+    "components": [
+      {
+        "component_id": "EHR-001",
+        "name": "HL7 / FHIR integration",
+        "description": "Interoperability with hospital systems via FHIR.",
+        "module": "Clinical Records",
+        "tech_stack": [
+          "python",
+          "fhir"
+        ],
+        "estimated_hours": 38,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "EHR-002",
+        "name": "Patient records (EHR)",
+        "description": "Encrypted patient records with access controls.",
+        "module": "Clinical Records",
+        "tech_stack": [
+          "python",
+          "postgresql"
+        ],
+        "estimated_hours": 63,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "SCH-001",
+        "name": "Appointment scheduling",
+        "description": "Calendars, availability and reminders.",
+        "module": "Scheduling",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 30,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "SCH-002",
+        "name": "Telemedicine session",
+        "description": "Video consultation with waiting room.",
+        "module": "Scheduling",
+        "tech_stack": [
+          "webrtc"
+        ],
+        "estimated_hours": 50,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-001",
+        "name": "End-to-end tests",
+        "description": "Browser-level E2E of the critical user journeys.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "playwright"
+        ],
+        "estimated_hours": 27,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "QA-002",
+        "name": "Automated test suite",
+        "description": "Unit and integration coverage for the core flows.",
+        "module": "QA & Testing",
+        "tech_stack": [
+          "pytest"
+        ],
+        "estimated_hours": 31,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-001",
+        "name": "Coordination & reporting",
+        "description": "Sprint ceremonies, stakeholder reporting and risk tracking.",
+        "module": "Project Management",
+        "tech_stack": [
+          "jira"
+        ],
+        "estimated_hours": 37,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "PM-002",
+        "name": "Discovery & requirements",
+        "description": "Workshops, scope definition and acceptance criteria.",
+        "module": "Project Management",
+        "tech_stack": [
+          "confluence"
+        ],
+        "estimated_hours": 27,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-001",
+        "name": "Container orchestration",
+        "description": "Kubernetes manifests, autoscaling and rollout strategy.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "kubernetes"
+        ],
+        "estimated_hours": 46,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "INFRA-002",
+        "name": "CI/CD pipeline",
+        "description": "Build, test and deploy pipeline with environments.",
+        "module": "Infrastructure & DevOps",
+        "tech_stack": [
+          "docker"
+        ],
+        "estimated_hours": 32,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-001",
+        "name": "SSO integration",
+        "description": "SAML/OIDC single sign-on against the client identity provider.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python",
+          "saml"
+        ],
+        "estimated_hours": 17,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "AUTH-002",
+        "name": "Password & MFA flows",
+        "description": "Reset, lockout and TOTP-based multi-factor authentication.",
+        "module": "Authentication & Access",
+        "tech_stack": [
+          "python"
+        ],
+        "estimated_hours": 19,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-001",
+        "name": "Reporting data model",
+        "description": "Star-schema tables and aggregation views for analytics.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "dbt",
+          "postgresql"
+        ],
+        "estimated_hours": 28,
+        "complexity": "medium",
+        "dependencies": []
+      },
+      {
+        "component_id": "DATA-002",
+        "name": "ETL / data sync job",
+        "description": "Scheduled extract-transform-load between systems.",
+        "module": "Data & Integrations",
+        "tech_stack": [
+          "airflow",
+          "python"
+        ],
+        "estimated_hours": 54,
+        "complexity": "high",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-001",
+        "name": "Accessibility & i18n",
+        "description": "WCAG pass and internationalisation of the UI.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 17,
+        "complexity": "low",
+        "dependencies": []
+      },
+      {
+        "component_id": "FE-002",
+        "name": "Core SPA scaffolding",
+        "description": "App shell, routing, state management and design system.",
+        "module": "Frontend / UX",
+        "tech_stack": [
+          "typescript"
+        ],
+        "estimated_hours": 38,
+        "complexity": "medium",
+        "dependencies": []
+      }
+    ]
+  }
+]

@@ -108,6 +108,191 @@ def test_migration_round_trip(database_url: str) -> None:
         engine.dispose()
 
 
+def test_english_full_text_migration_preserves_chunks_and_recomputes_vectors(
+    database_url: str,
+) -> None:
+    from app.rag.store import ChunkStore
+
+    engine = create_engine(database_url)
+    try:
+        _alembic(database_url, "upgrade", "head")
+        _alembic(database_url, "downgrade", "0005_chunks_fts_spanish")
+        with engine.begin() as connection:
+            document_id = connection.scalar(
+                text(
+                    "INSERT INTO documents (source_path, document_type) "
+                    "VALUES (:source_path, 'historical_budget') RETURNING id"
+                ),
+                {"source_path": f"test/fts-{uuid.uuid4().hex}.json"},
+            )
+            chunk_id = connection.scalar(
+                text(
+                    "INSERT INTO chunks (document_id, chunk_type, content) "
+                    "VALUES (:document_id, 'budget_component', :content) RETURNING id"
+                ),
+                {
+                    "document_id": document_id,
+                    "content": "The budgets include services.",
+                },
+            )
+
+        _alembic(database_url, "upgrade", "head")
+        with engine.connect() as connection:
+            column = connection.execute(
+                text(
+                    "SELECT data_type, is_generated, generation_expression "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'chunks' "
+                    "AND column_name = 'content_tsv'"
+                )
+            ).one()
+            assert column.data_type == "tsvector"
+            assert column.is_generated == "ALWAYS"
+            assert "'english'::regconfig" in column.generation_expression
+            assert connection.scalar(
+                text(
+                    "SELECT content_tsv = to_tsvector('english', content) "
+                    "FROM chunks WHERE id = :id"
+                ),
+                {"id": chunk_id},
+            ) is True
+        index = next(
+            index
+            for index in inspect(engine).get_indexes("chunks")
+            if index["name"] == "ix_chunks_content_tsv"
+        )
+        assert index["column_names"] == ["content_tsv"]
+        assert index["dialect_options"]["postgresql_using"] == "gin"
+
+        async def search() -> None:
+            async_url = make_url(database_url).set(drivername="postgresql+asyncpg")
+            async_engine = create_async_engine(async_url)
+            try:
+                async with async_sessionmaker(async_engine)() as session:
+                    rows = await ChunkStore().search_lexical(
+                        session, query_text="the budget"
+                    )
+                assert any(
+                    row.id == chunk_id
+                    and row.rank > 0
+                    and row.content == "The budgets include services."
+                    for row in rows
+                )
+            finally:
+                await async_engine.dispose()
+
+        asyncio.run(search())
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE chunks SET content = :content WHERE id = :id"),
+                {"id": chunk_id, "content": "The estimates include developments."},
+            )
+            assert connection.scalar(
+                text(
+                    "SELECT content_tsv = to_tsvector('english', content) "
+                    "AND content_tsv @@ plainto_tsquery('english', 'development') "
+                    "AND NOT (content_tsv @@ plainto_tsquery('english', 'budget')) "
+                    "FROM chunks WHERE id = :id"
+                ),
+                {"id": chunk_id},
+            ) is True
+
+        _alembic(database_url, "downgrade", "0005_chunks_fts_spanish")
+        with engine.connect() as connection:
+            assert connection.scalar(
+                text(
+                    "SELECT content_tsv = to_tsvector('spanish', content) "
+                    "FROM chunks WHERE id = :id"
+                ),
+                {"id": chunk_id},
+            ) is True
+        _alembic(database_url, "upgrade", "head")
+        with engine.begin() as connection:
+            assert connection.scalar(
+                text(
+                    "SELECT content_tsv = to_tsvector('english', content) "
+                    "FROM chunks WHERE id = :id"
+                ),
+                {"id": chunk_id},
+            ) is True
+            connection.execute(
+                text("DELETE FROM documents WHERE id = :id"), {"id": document_id}
+            )
+    finally:
+        engine.dispose()
+
+
+def test_hybrid_search_fuses_real_vector_and_english_lexical_results(
+    migrated_url: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.rag.retrieval.pipeline import retrieve
+    from app.rag.store import ChunkStore
+
+    async def exercise() -> None:
+        async_url = make_url(migrated_url).set(drivername="postgresql+asyncpg")
+        engine = create_async_engine(async_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        monkeypatch.setattr("app.persistence.database.get_async_session_factory", lambda: factory)
+        monkeypatch.setattr("app.dependencies.get_chunk_store", lambda: ChunkStore())
+        query_vector = [1.0, 0.0] + [0.0] * 1534
+        try:
+            async with factory() as session:
+                document = DocumentRow(
+                    source_path=f"test/hybrid-{uuid.uuid4().hex}.json",
+                    document_type="historical_budget",
+                )
+                session.add(document)
+                await session.flush()
+                chunks = [
+                    ChunkRow(
+                        document_id=document.id, chunk_type="budget_component",
+                        content=content, embedding=embedding,
+                        metadata_json={"client_sector": "fts_test", "year": 2024},
+                    )
+                    for content, embedding in [
+                        ("External integrations.", query_vector),
+                        ("The budgets include services.", [0.8, 0.6] + [0.0] * 1534),
+                        ("The budgets include services.", None),
+                    ]
+                ]
+                session.add_all(chunks)
+                await session.commit()
+                ids = [chunk.id for chunk in chunks]
+                document_id = document.id
+
+            kwargs = {
+                "query_embedding": query_vector,
+                "query_text": "the budget",
+                "top_k": 3,
+                "recall_k": 5,
+                "rerank": False,
+                "sectors": ["fts_test"],
+                "project_year_min": 2024,
+                "project_year_max": 2024,
+                "chunk_types": ["budget_component"],
+            }
+            vector = await retrieve(search_mode="vector", **kwargs)
+            assert [chunk.id for chunk in vector.chunks] == ids[:2]
+            hybrid = await retrieve(search_mode="hybrid", **kwargs)
+            assert [chunk.id for chunk in hybrid.chunks] == [ids[1], ids[0], ids[2]]
+            assert hybrid.candidates_evaluated == 3
+            assert hybrid.low_confidence is False
+            assert hybrid.chunks[0].distance == pytest.approx(0.2, abs=0.001)
+            assert hybrid.chunks[2].distance == 1.0
+            again = await retrieve(search_mode="hybrid", **kwargs)
+            assert again.chunks == hybrid.chunks
+
+            async with factory() as session:
+                document = await session.get(DocumentRow, document_id)
+                assert document is not None
+                await session.delete(document)
+                await session.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(exercise())
+
+
 def test_async_document_ingestion_commits_or_rolls_back_as_a_unit(migrated_url: str) -> None:
     budget_path = os.path.join(os.path.dirname(__file__), "..", "data", "budgets_sample.json")
     with open(budget_path, encoding="utf-8") as budget_file:

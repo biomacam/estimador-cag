@@ -104,7 +104,11 @@ def test_budget_models_preserve_all_sample_fields():
         "content": budget,
     }
     request = IngestRequest.model_validate(payload)
-    assert request.model_dump(mode="json") == payload
+    # chunk_type defaults to 'budget_component'; the sample has no 'module' (optional, None).
+    assert request.model_dump(mode="json", exclude_none=True) == {
+        **payload,
+        "chunk_type": "budget_component",
+    }
     assert isinstance(request.content, Budget)
     assert all(
         isinstance(component, BudgetComponent)
@@ -194,6 +198,7 @@ def test_chunker_preserves_each_component_and_context(budgets):
         assert chunk.metadata == {
             "budget_id": budget.budget_id,
             "component_id": component.component_id,
+            "module": None,
             "client_sector": budget.client_metadata.sector,
             "main_technology": budget.main_technology,
             "year": budget.year,
