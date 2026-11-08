@@ -1,5 +1,5 @@
 {
-  "description": "Golden set for retrieval evaluation. Five representative project descriptions to estimate, each hand-annotated with the historical budgets that are genuinely relevant. Graded over the BASE corpus (data/budgets_sample.json, chunk_type='budget_component') so the score is reproducible even if the task corpus is also ingested. A retrieved chunk counts as relevant iff its parent budget_id is in relevant_budget_ids. The distractors are deliberately cross-sector 'similar but irrelevant' budgets (e.g. e-commerce vendor payouts vs. a fintech payments gateway). This corpus has 15 budgets (BUD-2024-001..015), so Q2 lists three relevant budgets instead of the four annotated against the 17-budget corpus of ai-engineering.",
+  "description": "Five project descriptions manually annotated against all 15 budgets in data/budgets_sample.json before measuring retrieval. Relevance requires matching the requested functionality, not merely sharing a sector. A retrieved chunk is relevant when its parent budget_id is annotated. Evaluation uses only the base corpus. Queries and PostgreSQL full-text configuration are English to match the shipped dataset.",
   "corpus": "data/budgets_sample.json",
   "chunk_types": ["budget_component"],
   "k": 5,
@@ -13,20 +13,20 @@
     {
       "id": "Q2",
       "query": "Headless e-commerce storefront with a product catalog, shopping cart checkout and personalized product recommendations.",
-      "relevant_budget_ids": ["BUD-2024-005", "BUD-2024-006", "BUD-2024-007"],
-      "note": "E-commerce storefront/catalog/checkout. Trap: finance payment budgets (BUD-2024-003) and healthcare scheduling are close in topic words but wrong domain."
+      "relevant_budget_ids": ["BUD-2024-005"],
+      "note": "BUD-2024-005 directly covers catalog, cart, recommendations and storefront. BUD-2024-006 covers vendor payouts/disputes and BUD-2024-007 delivery slots/routes: same sector, but neither implements the requested storefront. Only four relevant chunks exist, so the maximum chunk precision@5 is 0.8."
     },
     {
       "id": "Q3",
       "query": "Telemedicine platform for patient appointment scheduling and video consultations with HL7/FHIR integration and clinical records.",
-      "relevant_budget_ids": ["BUD-2024-009", "BUD-2024-010"],
-      "note": "Healthcare telemedicine. Trap: BUD-2024-011 (pharmacy inventory) and BUD-2024-012 (clinical trials) share the healthcare sector but cover different functionality."
+      "relevant_budget_ids": ["BUD-2024-009"],
+      "note": "BUD-2024-009 directly implements FHIR integration, scheduling and video consultations. BUD-2024-010 covers wearables/alerts, not telemedicine; BUD-2024-011 and BUD-2024-012 cover pharmacy and trials. Only four relevant chunks exist, so the maximum chunk precision@5 is 0.8."
     },
     {
       "id": "Q4",
       "query": "Industrial IoT platform ingesting sensor telemetry for predictive maintenance and real-time equipment monitoring in a factory.",
-      "relevant_budget_ids": ["BUD-2024-013", "BUD-2024-015"],
-      "note": "Industrial telemetry/monitoring. Trap: BUD-2024-014 (warehouse AGV coordination) is industrial but logistics, not telemetry-driven maintenance."
+      "relevant_budget_ids": ["BUD-2024-013"],
+      "note": "BUD-2024-013 covers sensor ingestion, predictive maintenance and SCADA integration. BUD-2024-014 covers warehouse logistics; BUD-2024-015 covers energy-grid demand response rather than factory maintenance. Only three relevant chunks exist, so the maximum chunk precision@5 is 0.6."
     },
     {
       "id": "Q5",

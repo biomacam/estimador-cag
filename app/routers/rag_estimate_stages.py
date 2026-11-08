@@ -19,14 +19,14 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.config import get_settings
-from app.dependencies import get_embedder, get_token_encoder
+from app.dependencies import get_embedder, get_runtime_retrieval_config, get_token_encoder
 from app.rag.context_assembler import build_context_block, truncate_to_token_budget
 from app.rag.errors import RagError, RetrievalError
 from app.rag.estimator import generate_estimate
 from app.rag.observability import get_request_id, log_stage
 from app.rag.query_reformulator import compose_search_text, reformulate_query
 from app.rag.rate_limiting import limiter
-from app.rag.retriever import search_chunks
+from app.rag.retrieval.pipeline import retrieve as retrieve_chunks
 from app.rag.schemas import (
     AssembleRequest,
     AssembleResult,
@@ -71,22 +71,34 @@ async def reformulate(request: Request, payload: ReformulateRequest) -> Reformul
 )
 @limiter.limit("60/minute")
 async def retrieve(request: Request, payload: RetrievalRequest) -> RetrievalResult:
-    """Stage 2 — embed the search text (as ``query_text``) and run filtered k-NN.
+    """Stage 2 — embed the search text and run vector/hybrid retrieval.
 
     Returns the same ``RetrievalResult`` as ``/v1/retrieval/search`` so the caller
-    sees ``low_confidence``/``candidates_evaluated`` for the soft-fail branch."""
+    sees ``low_confidence``/``candidates_evaluated`` for the soft-fail branch.
+    Search mode and reranking resolve from request, runtime override, then settings."""
     request_id = get_request_id(request)
     embedder = get_embedder()
     if embedder is None:
         log.error("stage_failed", stage="retrieval", reason="embedder_unavailable")
         raise HTTPException(status_code=500, detail="Embedding service is not available.")
 
+    settings = get_settings()
+    runtime = get_runtime_retrieval_config()
+    search_mode = payload.search_mode or runtime.effective_search_mode()
+    rerank = payload.rerank if payload.rerank is not None else runtime.effective_rerank()
+
     try:
         with log_stage("retrieval", request_id, sectors=payload.sectors):
             query_embedding = await asyncio.to_thread(embedder.embed_one, payload.query_text)
-            return await search_chunks(
-                query_embedding,
+            return await retrieve_chunks(
+                query_embedding=query_embedding,
+                query_text=payload.query_text,
+                search_mode=search_mode,
+                rerank=rerank,
                 top_k=payload.top_k,
+                recall_k=settings.RETRIEVAL_RECALL_TOP_K,
+                rerank_top_n=settings.RERANK_TOP_N,
+                rrf_k=settings.RRF_K,
                 distance_threshold=payload.distance_threshold,
                 sectors=payload.sectors,
                 project_year_min=payload.project_year_min,

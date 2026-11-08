@@ -20,7 +20,7 @@ import time
 import structlog
 
 from app.rag.errors import RetrievalError
-from app.rag.retrieval.fusion import reciprocal_rank_fusion
+from app.rag.retrieval.fusion import DEFAULT_RRF_K, reciprocal_rank_fusion
 from app.rag.retriever import row_to_chunk
 from app.rag.schemas import RetrievalResult, RetrievedChunk
 
@@ -41,7 +41,7 @@ async def retrieve(
     recall_k: int = 50,
     rerank_top_n: int = 5,
     distance_threshold: float = 0.6,
-    rrf_k: int = 60,
+    rrf_k: int = DEFAULT_RRF_K,
     sectors: list[str] | None = None,
     project_year_min: int | None = None,
     project_year_max: int | None = None,
@@ -57,6 +57,13 @@ async def retrieve(
     """
     from app.dependencies import get_chunk_store
     from app.persistence.database import get_async_session_factory
+
+    if search_mode not in ("vector", "hybrid"):
+        raise ValueError(f"Invalid search mode: {search_mode}")
+    if rrf_k <= 0:
+        raise ValueError("RRF smoothing constant k must be positive")
+    if top_k <= 0 or recall_k <= 0 or rerank_top_n <= 0:
+        raise ValueError("Retrieval limits must be positive")
 
     session_factory = get_async_session_factory()
     store = get_chunk_store()
@@ -110,13 +117,20 @@ async def retrieve(
         ordered = [candidates[row.id] for row in vector_rows]
 
     if rerank and ordered:
-        if reranker is None:
-            from app.dependencies import get_reranker
+        try:
+            if reranker is None:
+                from app.dependencies import get_reranker
 
-            reranker = get_reranker()
-        final = await asyncio.to_thread(
-            reranker.rerank, query_text, ordered[:recall_k], top_n=rerank_top_n
-        )
+                reranker = get_reranker()
+            final = await asyncio.to_thread(
+                reranker.rerank, query_text, ordered[:recall_k], top_n=rerank_top_n
+            )
+        except Exception as exc:  # noqa: BLE001 — model loading or inference failure.
+            log.error(
+                "rag_reranking_failed",
+                error_type=type(exc).__name__, error=str(exc)[:200],
+            )
+            raise RetrievalError("Cross-encoder reranking failed.") from exc
     else:
         final = ordered[:top_k]
 

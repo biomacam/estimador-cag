@@ -1,0 +1,1327 @@
+{
+  "measured_at": "2026-11-08T17:59:36.687108+00:00",
+  "golden_sha256": "017fa22798820f114ff152822cb979872457a119911f6b2dd57b3a508f155b40",
+  "corpus_sha256": "71e0422bc0d55e58df3abc6b37919fe08788d64995d212e36ba237ab6f1cb32a",
+  "corpus_chunks": 52,
+  "lexical_hits_by_query": {
+    "Q1": 0,
+    "Q2": 0,
+    "Q3": 0,
+    "Q4": 0,
+    "Q5": 0
+  },
+  "queries": [
+    {
+      "id": "Q1",
+      "query": "Mobile banking application with OAuth2 authentication, PSD2 open banking compliance, strong customer authentication and a transaction ledger.",
+      "relevant_budget_ids": [
+        "BUD-2024-001",
+        "BUD-2024-003"
+      ],
+      "note": "Fintech auth + payments. Trap: BUD-2024-006 (e-commerce marketplace vendor payouts) is 'payments-like' but irrelevant for a banking auth project."
+    },
+    {
+      "id": "Q2",
+      "query": "Headless e-commerce storefront with a product catalog, shopping cart checkout and personalized product recommendations.",
+      "relevant_budget_ids": [
+        "BUD-2024-005"
+      ],
+      "note": "BUD-2024-005 directly covers catalog, cart, recommendations and storefront. BUD-2024-006 covers vendor payouts/disputes and BUD-2024-007 delivery slots/routes: same sector, but neither implements the requested storefront. Only four relevant chunks exist, so the maximum chunk precision@5 is 0.8."
+    },
+    {
+      "id": "Q3",
+      "query": "Telemedicine platform for patient appointment scheduling and video consultations with HL7/FHIR integration and clinical records.",
+      "relevant_budget_ids": [
+        "BUD-2024-009"
+      ],
+      "note": "BUD-2024-009 directly implements FHIR integration, scheduling and video consultations. BUD-2024-010 covers wearables/alerts, not telemedicine; BUD-2024-011 and BUD-2024-012 cover pharmacy and trials. Only four relevant chunks exist, so the maximum chunk precision@5 is 0.8."
+    },
+    {
+      "id": "Q4",
+      "query": "Industrial IoT platform ingesting sensor telemetry for predictive maintenance and real-time equipment monitoring in a factory.",
+      "relevant_budget_ids": [
+        "BUD-2024-013"
+      ],
+      "note": "BUD-2024-013 covers sensor ingestion, predictive maintenance and SCADA integration. BUD-2024-014 covers warehouse logistics; BUD-2024-015 covers energy-grid demand response rather than factory maintenance. Only three relevant chunks exist, so the maximum chunk precision@5 is 0.6."
+    },
+    {
+      "id": "Q5",
+      "query": "Real-time payments gateway with fraud detection, transaction reconciliation and a double-entry ledger.",
+      "relevant_budget_ids": [
+        "BUD-2024-003",
+        "BUD-2024-001"
+      ],
+      "note": "Fintech payments. Trap: BUD-2024-006 (e-commerce vendor payouts) and BUD-2024-007 (grocery delivery payments) are lexically near but wrong domain."
+    }
+  ],
+  "method": {
+    "k": 5,
+    "measured_runs_per_query": 3,
+    "warmup_runs_per_query": 1,
+    "latency_scope": "Retrieval plus reranking; excludes embedding, model loading and HTTP.",
+    "recall_k": 50,
+    "rrf_k": 60,
+    "distance_threshold": 2.0,
+    "embedding_model": "text-embedding-3-small",
+    "reranker_model": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    "text_search_config": "english",
+    "python": "3.14.2",
+    "platform": "Windows-11-10.0.22631-SP0",
+    "indexes": [
+      {
+        "name": "chunks_pkey",
+        "definition": "CREATE UNIQUE INDEX chunks_pkey ON public.chunks USING btree (id)"
+      },
+      {
+        "name": "ix_chunks_chunk_type",
+        "definition": "CREATE INDEX ix_chunks_chunk_type ON public.chunks USING btree (chunk_type)"
+      },
+      {
+        "name": "ix_chunks_content_tsv",
+        "definition": "CREATE INDEX ix_chunks_content_tsv ON public.chunks USING gin (content_tsv)"
+      },
+      {
+        "name": "ix_chunks_document_id",
+        "definition": "CREATE INDEX ix_chunks_document_id ON public.chunks USING btree (document_id)"
+      },
+      {
+        "name": "ix_chunks_metadata_gin",
+        "definition": "CREATE INDEX ix_chunks_metadata_gin ON public.chunks USING gin (metadata)"
+      }
+    ]
+  },
+  "configurations": {
+    "A": {
+      "search_mode": "vector",
+      "rerank": false,
+      "precision_at_5": 0.8400000000000001,
+      "latency_ms": 7.580539999374499,
+      "per_query": {
+        "Q1": {
+          "precision_at_5": 1.0,
+          "latency_ms": 6.314700003713369,
+          "runs": [
+            {
+              "latency_ms": 7.215899997390807,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                9
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-003"
+              ]
+            },
+            {
+              "latency_ms": 5.698100023437291,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                9
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-003"
+              ]
+            },
+            {
+              "latency_ms": 6.03009999031201,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                9
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-003"
+              ]
+            }
+          ]
+        },
+        "Q2": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 5.97336667124182,
+          "runs": [
+            {
+              "latency_ms": 5.884699989110231,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                27
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 5.8951000100933015,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                27
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 6.140300014521927,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                27
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            }
+          ]
+        },
+        "Q3": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 6.56253332272172,
+          "runs": [
+            {
+              "latency_ms": 5.868699983693659,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                31,
+                30,
+                33,
+                40
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 7.789900002535433,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                31,
+                30,
+                33,
+                40
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 6.028999981936067,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                31,
+                30,
+                33,
+                40
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            }
+          ]
+        },
+        "Q4": {
+          "precision_at_5": 0.6,
+          "latency_ms": 6.013333331793547,
+          "runs": [
+            {
+              "latency_ms": 6.369000009726733,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                49
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-014"
+              ]
+            },
+            {
+              "latency_ms": 5.687700002454221,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                49
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-014"
+              ]
+            },
+            {
+              "latency_ms": 5.983299983199686,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                49
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-014"
+              ]
+            }
+          ]
+        },
+        "Q5": {
+          "precision_at_5": 1.0,
+          "latency_ms": 13.038766667402038,
+          "runs": [
+            {
+              "latency_ms": 15.43690002290532,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 12.668000010307878,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 11.011399968992919,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "B": {
+      "search_mode": "hybrid",
+      "rerank": false,
+      "precision_at_5": 0.8400000000000001,
+      "latency_ms": 8.301826651828984,
+      "per_query": {
+        "Q1": {
+          "precision_at_5": 1.0,
+          "latency_ms": 8.681799983605742,
+          "runs": [
+            {
+              "latency_ms": 8.970199967734516,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                9
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-003"
+              ]
+            },
+            {
+              "latency_ms": 8.708400011528283,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                9
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-003"
+              ]
+            },
+            {
+              "latency_ms": 8.366799971554428,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                9
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-003"
+              ]
+            }
+          ]
+        },
+        "Q2": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 8.100999984890223,
+          "runs": [
+            {
+              "latency_ms": 7.828100002370775,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                27
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 8.503399963956326,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                27
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 7.971499988343567,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                27
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            }
+          ]
+        },
+        "Q3": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 8.758099982514977,
+          "runs": [
+            {
+              "latency_ms": 9.319699951447546,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                31,
+                30,
+                33,
+                40
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 8.218200004193932,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                31,
+                30,
+                33,
+                40
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 8.736399991903454,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                31,
+                30,
+                33,
+                40
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            }
+          ]
+        },
+        "Q4": {
+          "precision_at_5": 0.6,
+          "latency_ms": 7.99413329999273,
+          "runs": [
+            {
+              "latency_ms": 8.122899977024645,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                49
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-014"
+              ]
+            },
+            {
+              "latency_ms": 7.64499994693324,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                49
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-014"
+              ]
+            },
+            {
+              "latency_ms": 8.214499976020306,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                49
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-014"
+              ]
+            }
+          ]
+        },
+        "Q5": {
+          "precision_at_5": 1.0,
+          "latency_ms": 7.974100008141249,
+          "runs": [
+            {
+              "latency_ms": 7.769200019538403,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 8.22160003008321,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 7.931499974802136,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "C": {
+      "search_mode": "vector",
+      "rerank": true,
+      "precision_at_5": 0.8,
+      "latency_ms": 578.9590466651134,
+      "per_query": {
+        "Q1": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 573.6379333344909,
+          "runs": [
+            {
+              "latency_ms": 551.1686999816447,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                25
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-007"
+              ]
+            },
+            {
+              "latency_ms": 602.8705000062473,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                25
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-007"
+              ]
+            },
+            {
+              "latency_ms": 566.8746000155807,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                25
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-007"
+              ]
+            }
+          ]
+        },
+        "Q2": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 546.4621333327765,
+          "runs": [
+            {
+              "latency_ms": 554.8039000132121,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                29
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 536.8523999932222,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                29
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 547.7300999918953,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                29
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            }
+          ]
+        },
+        "Q3": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 576.2214666853348,
+          "runs": [
+            {
+              "latency_ms": 571.6777000343427,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                30,
+                31,
+                33,
+                41
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 582.1528999949805,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                30,
+                31,
+                33,
+                41
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 574.8338000266813,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                30,
+                31,
+                33,
+                41
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            }
+          ]
+        },
+        "Q4": {
+          "precision_at_5": 0.6,
+          "latency_ms": 597.3268999756934,
+          "runs": [
+            {
+              "latency_ms": 579.7541999490932,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                51
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-015"
+              ]
+            },
+            {
+              "latency_ms": 587.0333000202663,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                51
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-015"
+              ]
+            },
+            {
+              "latency_ms": 625.1931999577209,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                51
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-015"
+              ]
+            }
+          ]
+        },
+        "Q5": {
+          "precision_at_5": 1.0,
+          "latency_ms": 601.1467999972714,
+          "runs": [
+            {
+              "latency_ms": 620.5434000003152,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 598.6566999927163,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 584.2402999987826,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "D": {
+      "search_mode": "hybrid",
+      "rerank": true,
+      "precision_at_5": 0.8,
+      "latency_ms": 586.8387533312974,
+      "per_query": {
+        "Q1": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 598.5144000151195,
+          "runs": [
+            {
+              "latency_ms": 604.9235999817029,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                25
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-007"
+              ]
+            },
+            {
+              "latency_ms": 594.1002000472508,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                25
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-007"
+              ]
+            },
+            {
+              "latency_ms": 596.5194000164047,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                2,
+                3,
+                1,
+                4,
+                25
+              ],
+              "budget_ids": [
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-001",
+                "BUD-2024-007"
+              ]
+            }
+          ]
+        },
+        "Q2": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 570.3596333235813,
+          "runs": [
+            {
+              "latency_ms": 565.2377999504097,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                29
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 574.7900999849662,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                29
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            },
+            {
+              "latency_ms": 571.0510000353679,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                17,
+                18,
+                16,
+                19,
+                29
+              ],
+              "budget_ids": [
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-005",
+                "BUD-2024-008"
+              ]
+            }
+          ]
+        },
+        "Q3": {
+          "precision_at_5": 0.8000000000000002,
+          "latency_ms": 592.5912333186716,
+          "runs": [
+            {
+              "latency_ms": 591.3075999706052,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                30,
+                31,
+                33,
+                41
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 589.4213999854401,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                30,
+                31,
+                33,
+                41
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            },
+            {
+              "latency_ms": 597.0446999999695,
+              "precision_at_5": 0.8,
+              "chunk_ids": [
+                32,
+                30,
+                31,
+                33,
+                41
+              ],
+              "budget_ids": [
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-009",
+                "BUD-2024-012"
+              ]
+            }
+          ]
+        },
+        "Q4": {
+          "precision_at_5": 0.6,
+          "latency_ms": 589.7176999909183,
+          "runs": [
+            {
+              "latency_ms": 595.7277999841608,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                51
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-015"
+              ]
+            },
+            {
+              "latency_ms": 588.4108999744058,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                51
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-015"
+              ]
+            },
+            {
+              "latency_ms": 585.0144000141881,
+              "precision_at_5": 0.6,
+              "chunk_ids": [
+                43,
+                44,
+                45,
+                50,
+                51
+              ],
+              "budget_ids": [
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-013",
+                "BUD-2024-015",
+                "BUD-2024-015"
+              ]
+            }
+          ]
+        },
+        "Q5": {
+          "precision_at_5": 1.0,
+          "latency_ms": 583.0108000081964,
+          "runs": [
+            {
+              "latency_ms": 579.1360000148416,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 579.8225000035018,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            },
+            {
+              "latency_ms": 590.0739000062458,
+              "precision_at_5": 1.0,
+              "chunk_ids": [
+                11,
+                9,
+                12,
+                10,
+                3
+              ],
+              "budget_ids": [
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-003",
+                "BUD-2024-001"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

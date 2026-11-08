@@ -65,7 +65,7 @@ def stub(monkeypatch):
     async def fake_reformulate(transcript):
         return EstimationQuery(function="online store with card checkout", sector="ecommerce")
 
-    async def fake_search(query_embedding, **kwargs):
+    async def fake_search(**kwargs):
         return RetrievalResult(chunks=[_chunk(1), _chunk(2)], low_confidence=False, candidates_evaluated=12)
 
     async def fake_retrieve(**kwargs):
@@ -79,7 +79,8 @@ def stub(monkeypatch):
     monkeypatch.setattr(stages, "reformulate_query", fake_reformulate)
     monkeypatch.setattr(stages, "compose_search_text", lambda q: "online store card checkout ecommerce")
     monkeypatch.setattr(stages, "get_embedder", lambda: _Embedder())
-    monkeypatch.setattr(stages, "search_chunks", fake_search)
+    monkeypatch.setattr(stages, "retrieve_chunks", fake_search)
+    monkeypatch.setattr(stages, "get_runtime_retrieval_config", lambda: runtime)
     monkeypatch.setattr(retrieval_router, "get_embedder", lambda: _Embedder())
     monkeypatch.setattr(retrieval_router, "get_runtime_retrieval_config", lambda: runtime)
     monkeypatch.setattr(retrieval_router, "retrieve", fake_retrieve)
@@ -200,6 +201,73 @@ def test_retrieval_failure_maps_to_502(api, monkeypatch):
     assert api.post("/v1/retrieval/search", json=_QUERY, headers=_h(RET_KEY)).status_code == 502
 
 
+@pytest.mark.parametrize(
+    "path,target,key",
+    [
+        ("/v1/retrieval/search", retrieval_router, RET_KEY),
+        ("/v1/estimate/stages/retrieve", stages, EST_KEY),
+    ],
+)
+@pytest.mark.parametrize("search_mode,rerank", [
+    ("vector", False), ("hybrid", False), ("vector", True), ("hybrid", True),
+])
+def test_both_retrieval_endpoints_forward_all_four_configurations(
+    api, monkeypatch, path, target, key, search_mode, rerank,
+):
+    seen = {}
+
+    async def spy(**kwargs):
+        seen.update(kwargs)
+        return RetrievalResult(
+            chunks=[_chunk(2), _chunk(1)], low_confidence=False, candidates_evaluated=4,
+        )
+
+    monkeypatch.setattr(target, "retrieve" if target is retrieval_router else "retrieve_chunks", spy)
+    monkeypatch.setattr(
+        target, "get_runtime_retrieval_config",
+        lambda: SimpleNamespace(effective_search_mode=lambda: "hybrid", effective_rerank=lambda: True),
+    )
+    response = api.post(
+        path,
+        json={
+            **_QUERY, "search_mode": search_mode, "rerank": rerank, "top_k": 2,
+            "sectors": ["ecommerce"], "project_year_min": 2020, "project_year_max": 2025,
+            "chunk_types": ["budget_component"],
+        },
+        headers=_h(key),
+    )
+
+    assert response.status_code == 200
+    assert [chunk["id"] for chunk in response.json()["chunks"]] == [2, 1]
+    assert (seen["search_mode"], seen["rerank"]) == (search_mode, rerank)
+    assert seen["query_text"] == _QUERY["query_text"]
+    assert seen["query_embedding"] == [0.0] * 1536
+    assert seen["top_k"] == 2
+    assert seen["rrf_k"] == get_settings().RRF_K
+    assert seen["recall_k"] == get_settings().RETRIEVAL_RECALL_TOP_K
+    assert seen["sectors"] == ["ecommerce"]
+    assert (seen["project_year_min"], seen["project_year_max"]) == (2020, 2025)
+    assert seen["chunk_types"] == ["budget_component"]
+
+
+def test_retrieve_stage_uses_runtime_defaults_when_switches_are_omitted(api, monkeypatch):
+    seen = {}
+
+    async def spy(**kwargs):
+        seen.update(kwargs)
+        return RetrievalResult(chunks=[], low_confidence=True, candidates_evaluated=0)
+
+    monkeypatch.setattr(stages, "retrieve_chunks", spy)
+    monkeypatch.setattr(
+        stages, "get_runtime_retrieval_config",
+        lambda: SimpleNamespace(effective_search_mode=lambda: "hybrid", effective_rerank=lambda: True),
+    )
+    response = api.post("/v1/estimate/stages/retrieve", json=_QUERY, headers=_h())
+
+    assert response.status_code == 200 and response.json()["low_confidence"] is True
+    assert (seen["search_mode"], seen["rerank"]) == ("hybrid", True)
+
+
 def test_estimate_pipeline_failure_maps_to_502(api, monkeypatch):
     from app.rag.errors import GenerationError
 
@@ -225,10 +293,10 @@ def test_retrieve_stage_passes_chunks_and_soft_fail_through(api, monkeypatch):
     ok = api.post("/v1/estimate/stages/retrieve", json=_QUERY, headers=_h()).json()
     assert len(ok["chunks"]) == 2 and ok["low_confidence"] is False
 
-    async def empty(query_embedding, **kwargs):
+    async def empty(**kwargs):
         return RetrievalResult(chunks=[], low_confidence=True, candidates_evaluated=9)
 
-    monkeypatch.setattr(stages, "search_chunks", empty)
+    monkeypatch.setattr(stages, "retrieve_chunks", empty)
     soft = api.post("/v1/estimate/stages/retrieve", json=_QUERY, headers=_h()).json()
     assert soft["chunks"] == [] and soft["low_confidence"] is True
 
@@ -332,6 +400,72 @@ def test_config_endpoint_flips_and_resets_the_toggles(api, runtime_config):
 
 def test_config_endpoint_rejects_an_unknown_search_mode(api, runtime_config):
     assert api.put("/api/v1/config/retrieval", json={"search_mode": "fuzzy"}).status_code == 422
+
+
+@pytest.mark.parametrize("path,target,key", [
+    ("/v1/retrieval/search", retrieval_router, RET_KEY),
+    ("/v1/estimate/stages/retrieve", stages, EST_KEY),
+])
+def test_runtime_toggle_changes_next_search_from_top_50_to_top_5(
+    api, runtime_config, monkeypatch, path, target, key,
+):
+    from app.rag.retrieval.pipeline import retrieve
+    from app.rag.retrieval.reranker import CrossEncoderReranker
+
+    pairs_seen = []
+    limits_seen = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+    class Store:
+        async def search_filtered(self, session, **kwargs):
+            limits_seen.append(kwargs["top_k"])
+            rows = [
+                SimpleNamespace(
+                    id=cid, content=f"chunk-{cid}", chunk_type="budget_component",
+                    metadata_={"client_sector": "ecommerce", "year": 2024},
+                    distance=0.3,
+                )
+                for cid in range(1, kwargs["top_k"] + 1)
+            ]
+            return rows, 70
+
+    class Model:
+        def predict(self, pairs):
+            pairs_seen.extend(pairs)
+            return [float(document.split("-")[1]) for _query, document in pairs]
+
+    reranker = CrossEncoderReranker("test-model")
+    monkeypatch.setattr(reranker, "_ensure_loaded", lambda: Model())
+    monkeypatch.setattr("app.dependencies.get_reranker", lambda: reranker)
+    monkeypatch.setattr("app.dependencies.get_chunk_store", lambda: Store())
+    monkeypatch.setattr("app.persistence.database.get_async_session_factory", lambda: Session)
+    monkeypatch.setattr(target, "get_runtime_retrieval_config", lambda: runtime_config)
+    monkeypatch.setattr(target, "retrieve" if target is retrieval_router else "retrieve_chunks", retrieve)
+    settings = SimpleNamespace(RETRIEVAL_RECALL_TOP_K=50, RERANK_TOP_N=5, RRF_K=60)
+    monkeypatch.setattr(target, "get_settings", lambda: settings)
+
+    for enabled, expected in [
+        (False, list(range(1, 11))),
+        (True, [50, 49, 48, 47, 46]),
+        (False, list(range(1, 11))),
+    ]:
+        update = api.put(
+            "/api/v1/config/retrieval", json={"search_mode": "vector", "rerank": enabled},
+        )
+        assert update.status_code == 200
+        assert update.json()["retrieval"]["RERANKER_ENABLED"]["effective"] is enabled
+        response = api.post(path, json=_QUERY, headers=_h(key))
+        assert response.status_code == 200
+        assert [chunk["id"] for chunk in response.json()["chunks"]] == expected
+
+    assert limits_seen == [10, 50, 10]
+    assert len(pairs_seen) == 50  # inference only ran for the enabled request
 
 
 # --- idempotency store -----------------------------------------------------

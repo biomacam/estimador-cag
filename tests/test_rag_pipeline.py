@@ -188,9 +188,74 @@ def test_hybrid_mode_fuses_both_branches_and_recalls_wide(wire_store):
 
     result = _retrieve(search_mode="hybrid", rerank=False, top_k=5, recall_k=50)
 
-    assert {c.id for c in result.chunks} == {1, 2, 3}  # id 3 only surfaced lexically
+    assert [c.id for c in result.chunks] == [1, 3, 2]
+    assert result.chunks[0].distance == 0.3  # vector distance wins for shared hits
+    assert result.chunks[1].distance == 1.0  # lexical-only display sentinel
     assert store.vector_calls[0]["top_k"] == 50
     assert store.lexical_calls[0]["top_k"] == 50
+
+
+@pytest.mark.parametrize(
+    "vector_ids,lexical_ids,expected",
+    [
+        ([1, 2], [3, 2], [2, 1, 3]),
+        ([], [3, 2], [3, 2]),
+        ([1, 2], [], [1, 2]),
+        ([], [], []),
+    ],
+)
+def test_hybrid_returns_a_unique_fused_ranking(wire_store, vector_ids, lexical_ids, expected):
+    wire_store(FakeStore([_row(cid) for cid in vector_ids], [_row(cid) for cid in lexical_ids]))
+
+    result = _retrieve(search_mode="hybrid", top_k=10, rrf_k=10)
+
+    assert [chunk.id for chunk in result.chunks] == expected
+    assert result.low_confidence is (not expected)
+
+
+def test_hybrid_applies_filters_to_both_branches_and_limits_after_fusion(wire_store):
+    store = FakeStore([_row(1), _row(2)], [_row(3), _row(2)])
+    wire_store(store)
+    filters = {
+        "sectors": ["finance"],
+        "project_year_min": 2020,
+        "project_year_max": 2025,
+        "chunk_types": ["budget_component"],
+    }
+
+    result = _retrieve(search_mode="hybrid", top_k=1, recall_k=3, **filters)
+
+    assert [chunk.id for chunk in result.chunks] == [2]
+    for calls in (store.vector_calls, store.lexical_calls):
+        assert all(calls[0][key] == value for key, value in filters.items())
+
+
+def test_hybrid_reranking_receives_the_fused_candidates(wire_store):
+    wire_store(FakeStore([_row(1), _row(2)], [_row(3), _row(2)]))
+    seen = []
+
+    class RecordingReranker:
+        def rerank(self, query, candidates, *, top_n):
+            seen.extend(chunk.id for chunk in candidates)
+            return list(reversed(candidates))[:top_n]
+
+    result = _retrieve(
+        search_mode="hybrid", rerank=True, recall_k=3,
+        rerank_top_n=2, reranker=RecordingReranker(),
+    )
+
+    assert seen == [2, 1, 3]
+    assert [chunk.id for chunk in result.chunks] == [3, 1]
+
+
+@pytest.mark.parametrize("kwargs", [{"search_mode": "invalid"}, {"rrf_k": 0}])
+def test_retrieve_rejects_invalid_parameters_before_querying(wire_store, kwargs):
+    store = FakeStore([], [])
+    wire_store(store)
+
+    with pytest.raises(ValueError):
+        _retrieve(**kwargs)
+    assert store.vector_calls == [] and store.lexical_calls == []
 
 
 def test_rerank_reorders_and_cuts_to_top_n(wire_store):
@@ -210,6 +275,60 @@ def test_retrieval_soft_fails_when_nothing_is_found(wire_store):
     assert result.chunks == []
     assert result.low_confidence is True
     assert result.candidates_evaluated == 7
+
+
+@pytest.mark.parametrize("search_mode", ["vector", "hybrid"])
+def test_cross_encoder_scores_top_50_and_keeps_top_5(wire_store, monkeypatch, search_mode):
+    from app.rag.retrieval.reranker import CrossEncoderReranker
+
+    store = FakeStore([_row(cid) for cid in range(1, 71)], [])
+    wire_store(store)
+    pairs_seen = []
+
+    class Model:
+        def predict(self, pairs):
+            pairs_seen.extend(pairs)
+            return [float(document.split("-")[1]) for _query, document in pairs]
+
+    reranker = CrossEncoderReranker("test-cross-encoder")
+    monkeypatch.setattr(reranker, "_ensure_loaded", lambda: Model())
+    monkeypatch.setattr(deps, "get_reranker", lambda: reranker)
+
+    result = _retrieve(search_mode=search_mode, rerank=True)
+
+    assert store.vector_calls[0]["top_k"] == 50
+    assert len(pairs_seen) == 50
+    assert pairs_seen[0] == ("ecommerce checkout", "chunk-1")
+    assert pairs_seen[-1] == ("ecommerce checkout", "chunk-50")
+    assert [chunk.id for chunk in result.chunks] == [50, 49, 48, 47, 46]
+
+
+@pytest.mark.parametrize("rerank,rows", [(False, [_row(1)]), (True, [])])
+def test_reranker_is_not_resolved_when_disabled_or_candidates_are_empty(
+    wire_store, monkeypatch, rerank, rows,
+):
+    wire_store(FakeStore(rows, []))
+
+    def unexpected():
+        pytest.fail("Disabled or empty retrieval must not resolve the cross-encoder")
+
+    monkeypatch.setattr(deps, "get_reranker", unexpected)
+    result = _retrieve(rerank=rerank)
+    assert [chunk.id for chunk in result.chunks] == [row.id for row in rows]
+
+
+def test_reranker_failure_is_a_retrieval_error_without_a_fallback(wire_store):
+    from app.rag.errors import RetrievalError
+
+    wire_store(FakeStore([_row(1)], []))
+
+    class BrokenReranker:
+        def rerank(self, *args, **kwargs):
+            raise RuntimeError("Model inference failed")
+
+    with pytest.raises(RetrievalError, match="Cross-encoder reranking failed") as exc:
+        _retrieve(rerank=True, reranker=BrokenReranker())
+    assert isinstance(exc.value.__cause__, RuntimeError)
 
 
 # --- orchestrator ----------------------------------------------------------

@@ -16,7 +16,7 @@ class ReformulationError(RagError):
 
 
 class RetrievalError(RagError):
-    """The vector store could not be queried (DB/connection failure)."""
+    """Retrieval or cross-encoder reranking failed."""
 
 
 class GenerationError(RagError):

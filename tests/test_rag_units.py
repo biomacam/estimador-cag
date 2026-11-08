@@ -157,13 +157,25 @@ def test_rrf_rewards_agreement_between_branches():
 
 
 def test_rrf_ignores_duplicates_empty_branches_and_breaks_ties_by_id():
-    assert reciprocal_rank_fusion([[5, 5, 5], []]) == [(5, pytest.approx(1 / 60))]
+    assert reciprocal_rank_fusion([[5, 5, 5], []]) == [(5, pytest.approx(1 / 61))]
     assert [cid for cid, _ in reciprocal_rank_fusion([[2], [1]])] == [1, 2]
 
 
 def test_rrf_rejects_non_positive_k():
     with pytest.raises(ValueError):
         reciprocal_rank_fusion([[1]], k=0)
+
+
+def test_rrf_uses_one_based_positions_and_configured_smoothing():
+    fused = reciprocal_rank_fusion([[1, 2], [2, 3]], k=10)
+
+    assert [cid for cid, _ in fused] == [2, 1, 3]
+    assert dict(fused) == {
+        1: pytest.approx(1 / 11),
+        2: pytest.approx(1 / 12 + 1 / 11),
+        3: pytest.approx(1 / 12),
+    }
+    assert reciprocal_rank_fusion([[], []]) == []
 
 
 # --- reranker --------------------------------------------------------------
@@ -186,6 +198,27 @@ def test_reranker_orders_by_score_and_cuts_to_top_n():
     assert ranked == ["b", "c"]
     assert reranker.rerank("q", [], top_n=3) == []
 
+
+@pytest.mark.parametrize("scores", [[], [0.5, 0.2], [float("nan")], [float("inf")]])
+def test_reranker_rejects_missing_extra_or_nonfinite_scores(monkeypatch, scores):
+    reranker = CrossEncoderReranker("test-model")
+
+    class Model:
+        def predict(self, pairs):
+            return scores
+
+    monkeypatch.setattr(reranker, "_ensure_loaded", lambda: Model())
+    with pytest.raises(ValueError, match="one finite score per document"):
+        reranker.score("query", ["document"])
+
+
+def test_reranker_preserves_recall_order_when_scores_tie():
+    reranker = CrossEncoderReranker("test-model")
+    reranker._model = _FakeModel({"a": 0.5, "b": 0.5, "c": 0.5})
+
+    assert reranker.rerank("query", ["b", "a", "c"], top_n=2, text_of=str) == ["b", "a"]
+    with pytest.raises(ValueError, match="top_n must be positive"):
+        reranker.rerank("query", [], top_n=0)
 
 # --- SQL built by the store ------------------------------------------------
 
@@ -226,3 +259,7 @@ def test_lexical_and_filtered_statements_compile_to_expected_sql(monkeypatch):
     assert "halfvec" in vector_sql.lower()  # served by the halfvec expression index
     assert "plainto_tsquery" in lexical_sql and "@@" in lexical_sql and "ts_rank_cd" in lexical_sql
     assert "chunk_type IN" in lexical_sql
+    assert "ORDER BY ts_rank_cd" in lexical_sql and ", chunks.id" in lexical_sql
+    assert ", chunks.id" in vector_sql
+    lexical_params = captured[-1].compile(dialect=postgresql.dialect()).params
+    assert lexical_params["plainto_tsquery_1"] == "english"

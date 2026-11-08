@@ -3,7 +3,8 @@
 The vector branch (cosine distance, lower = better) and the lexical branch
 (``ts_rank_cd``, higher = better) produce incomparable scores, so only the order
 each branch puts documents in is trusted. A document scores ``sum(1 / (k + rank))``
-over every ranking it appears in (rank is 0-based); 60 is the Cormack et al. default.
+over every ranking it appears in (rank starts at 1); 60 is the default smoothing
+constant.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ def reciprocal_rank_fusion(
     scores: dict[int, float] = {}
     for ranking in rankings:
         seen: set[int] = set()
-        for position, chunk_id in enumerate(ranking):
+        for position, chunk_id in enumerate(ranking, start=1):
             if chunk_id in seen:
                 continue
             seen.add(chunk_id)

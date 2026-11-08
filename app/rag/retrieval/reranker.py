@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import threading
 import time
+from math import isfinite
 
 import structlog
 
@@ -66,14 +67,20 @@ class CrossEncoderReranker:
         model = self._ensure_loaded()
         pairs = [(query, document) for document in documents]
         started = time.perf_counter()
-        scores = model.predict(pairs)
+        scores = [float(score) for score in model.predict(pairs)]
+        if len(scores) != len(documents) or not all(isfinite(score) for score in scores):
+            log.error(
+                "reranker_invalid_scores", model=self._model_name,
+                expected=len(documents), received=len(scores),
+            )
+            raise ValueError("Cross-encoder must return one finite score per document.")
         log.info(
             "reranker_scored",
             model=self._model_name,
             pairs=len(pairs),
             score_ms=int((time.perf_counter() - started) * 1000),
         )
-        return [float(score) for score in scores]
+        return scores
 
     def rerank(
         self,
@@ -87,6 +94,8 @@ class CrossEncoderReranker:
 
         The sort is stable, so equal scores keep their recall order.
         """
+        if top_n <= 0:
+            raise ValueError("Reranker top_n must be positive.")
         if not candidates:
             return []
         scores = self.score(query, [text_of(candidate) for candidate in candidates])

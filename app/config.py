@@ -97,9 +97,9 @@ class Settings(BaseSettings):
     RERANKER_ENABLED: bool = True
     RERANKER_MODEL: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     # Candidates recalled before fusion/reranking, and the cut after reranking.
-    RETRIEVAL_RECALL_TOP_K: int = 50
-    RERANK_TOP_N: int = 5
-    RRF_K: int = 60
+    RETRIEVAL_RECALL_TOP_K: int = Field(default=50, gt=0)
+    RERANK_TOP_N: int = Field(default=5, gt=0)
+    RRF_K: int = Field(default=60, gt=0)
 
     @model_validator(mode="after")
     def _salt_must_be_set_in_production(self) -> "Settings":

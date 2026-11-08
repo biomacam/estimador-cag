@@ -66,7 +66,7 @@ class ChunkStore:
             .where(ChunkRow.embedding.is_not(None))
             .where(*structural_filters)
             .where(distance <= distance_threshold)
-            .order_by(distance)
+            .order_by(distance, ChunkRow.id)
             .limit(top_k)
         )
         return list((await session.execute(stmt)).all()), candidates_evaluated
@@ -86,7 +86,7 @@ class ChunkStore:
 
         ``plainto_tsquery`` + ``@@`` keeps matching chunks and ``ts_rank_cd`` ranks
         them (higher = better, opposite to vector distance). The ``english`` config
-        must match the generated column's config (migration 0004).
+        must match the generated column's config (migration 0006).
         """
         tsquery = func.plainto_tsquery("english", query_text)
         rank = func.ts_rank_cd(_CONTENT_TSV, tsquery)
@@ -108,7 +108,7 @@ class ChunkStore:
             )
             .where(_CONTENT_TSV.op("@@")(tsquery))
             .where(*structural_filters)
-            .order_by(rank.desc())
+            .order_by(rank.desc(), ChunkRow.id)
             .limit(top_k)
         )
         return list((await session.execute(stmt)).all())

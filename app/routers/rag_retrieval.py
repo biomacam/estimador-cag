@@ -1,8 +1,10 @@
-"""``POST /v1/retrieval/search`` — metadata-filtered semantic retrieval.
+"""``POST /v1/retrieval/search`` — metadata-filtered vector/hybrid retrieval.
 
 Canonical authenticated search: embeds the query text and runs k-NN with a
 relevance threshold plus optional structural filters (sector / project year /
-chunk type). The unauthenticated ``POST /search`` stays for backwards compatibility.
+chunk type). Hybrid mode adds English full-text matching and RRF fusion; either
+mode can apply reranking. The unauthenticated ``POST /search`` stays vector-only
+for backwards compatibility.
 
 Thin transport: validation in ``RetrievalRequest`` (422), auth (401), rate
 limiting (429). Soft-fail (nothing crosses the threshold) is a 200 with
