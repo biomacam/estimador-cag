@@ -1,14 +1,21 @@
 import structlog
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from pathlib import Path
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
 
 from app.config import Settings, get_settings
 from app.embedding_pipeline.router import router as embeddings_router
+from app.rag.rate_limiting import limiter, rate_limit_exceeded_handler
 from app.routers import estimations, ingestion, search, sessions
+from app.routers.rag_config import router as rag_config_router
+from app.routers.rag_estimate import router as rag_estimate_router
+from app.routers.rag_estimate_stages import router as rag_estimate_stages_router
+from app.routers.rag_retrieval import router as rag_retrieval_router
 from app.services.llm_service import LLM_PROVIDER_ERROR_MESSAGE, LLMServiceError
 from app.services.llm_wrapper import LLMConfigurationError
 
@@ -76,6 +83,29 @@ app.include_router(sessions.router)
 app.include_router(ingestion.router)
 app.include_router(embeddings_router)
 app.include_router(search.router)
+# RAG: authenticated retrieval + grounded estimation, each with its own API key.
+app.include_router(rag_retrieval_router)
+app.include_router(rag_estimate_router)
+app.include_router(rag_estimate_stages_router)
+app.include_router(rag_config_router)
+
+# The @limiter decorators read ``app.state.limiter``; breaches become a JSON 429.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Bind a correlation id for structlog and echo it on the ``X-Request-ID`` header."""
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request.state.request_id = request_id
+    structlog.contextvars.bind_contextvars(request_id=request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        structlog.contextvars.unbind_contextvars("request_id")
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.exception_handler(LLMConfigurationError)

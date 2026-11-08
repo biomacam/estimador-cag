@@ -24,6 +24,10 @@ class BudgetComponent(BaseModel):
     component_id: str = Field(description="Stable id within the budget, e.g. 'AUTH-001'.")
     name: str = Field(description="Short human-readable component name.")
     description: str = Field(description="Detailed description of the work.")
+    module: str | None = Field(
+        default=None,
+        description="Functional block this component/task belongs to (e.g. 'Payments').",
+    )
     tech_stack: list[str] = Field(
         default_factory=list, description="Technologies involved in this component."
     )
@@ -69,6 +73,11 @@ class IngestRequest(BaseModel):
     source_path: str = Field(min_length=1, description="Stable source path for deduplication.")
     document_type: str = Field(min_length=1, max_length=50)
     content: Budget = Field(description="Complete source budget consumed by the structural chunker.")
+    chunk_type: str = Field(
+        default="budget_component",
+        max_length=50,
+        description="chunk_type stamped on every chunk (filterable); the task corpus uses 'historical_task'.",
+    )
 
     model_config = {
         "json_schema_extra": {

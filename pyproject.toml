@@ -44,6 +44,10 @@ dependencies = [
     "langchain-experimental>=0.3.0",
     "langchain-openai>=0.2.0",
     "nltk>=3.9",
+    # RAG API hardening: per-API-key rate limiting
+    "slowapi>=0.1.9",
+    # Cross-encoder reranking (recall-then-rerank); pulls torch, loaded lazily at runtime
+    "sentence-transformers>=3.0",
 ]
 
 

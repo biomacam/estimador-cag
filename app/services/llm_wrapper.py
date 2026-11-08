@@ -49,6 +49,8 @@ class LLMConfigurationError(Exception):
 MODEL_COSTS: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gpt-5": {"input": 1.25, "output": 10.00},
+    "gpt-5-mini": {"input": 0.25, "output": 2.00},
     "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
     "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
     "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
@@ -149,10 +151,12 @@ class LLMWrapper:
         model_override: str | None = None,
         max_tokens: int = 4000,
         max_retries: int = 6,
+        reasoning_effort: str | None = None,
     ) -> tuple[StructuredResult, dict[str, Any]]:
         """Generate and cache only validated structured responses via Instructor.
 
         Uses the primary model directly, without the legacy Router's fallback.
+        ``reasoning_effort`` is forwarded to reasoning models (gpt-5 family).
         """
         target_model = model_override or self.primary_model
         provider = _provider_from_model(target_model)
@@ -168,6 +172,8 @@ class LLMWrapper:
         )
         cache_digest = hashlib.sha256(
             f"{mode.value}:{schema_digest}:{prompt_key}".encode("utf-8")
+            if reasoning_effort is None
+            else f"{mode.value}:{schema_digest}:{prompt_key}:{reasoning_effort}".encode("utf-8")
         ).hexdigest()
         cache_key = f"structured:{cache_digest}"
         cached = self.cache.get(cache_key)
@@ -187,6 +193,7 @@ class LLMWrapper:
             response_model=response_model,
             max_tokens=max_tokens,
             max_retries=max_retries,
+            reasoning_effort=reasoning_effort,
             event="llm_structured_call",
         )
         self.cache.set(cache_key, {"result": validated.model_dump(mode="json"), "meta": meta})
@@ -229,6 +236,7 @@ class LLMWrapper:
         max_tokens: int,
         max_retries: int,
         event: str,
+        reasoning_effort: str | None = None,
     ) -> tuple[StructuredResult, dict[str, Any]]:
         """Instructor call returning the validated model plus model, provider, latency, tokens
         and cost. Instructor folds the usage of its re-prompts into the returned completion."""
@@ -241,6 +249,9 @@ class LLMWrapper:
             messages=len(messages),
         )
         started = time.perf_counter()
+        # Only sent when set: LiteLLM forwards it to reasoning models and translates
+        # max_tokens to max_completion_tokens.
+        extra: dict[str, Any] = {} if reasoning_effort is None else {"reasoning_effort": reasoning_effort}
         result, completion = client.chat.completions.create_with_completion(
             model=target_model,
             api_key=self._api_key_for(target_model),
@@ -249,6 +260,7 @@ class LLMWrapper:
             response_model=response_model,
             max_tokens=max_tokens,
             max_retries=max_retries,
+            **extra,
         )
         validated = response_model.model_validate(result.model_dump())
         usage = getattr(completion, "usage", None)

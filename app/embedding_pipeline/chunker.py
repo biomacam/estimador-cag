@@ -14,11 +14,13 @@ from app.embedding_pipeline.schemas import Budget, BudgetComponent, Chunk
 
 def render_component_text(budget: Budget, component: BudgetComponent) -> str:
     """Parent context header and component detail sent to the embedding API."""
+    module_line = f"Module: {component.module}\n" if component.module else ""
     return (
         f"[Project: {budget.project_summary}]\n"
         f"[Client sector: {budget.client_metadata.sector} | "
         f"Year: {budget.year} | Main tech: {budget.main_technology}]\n"
         f"\n"
+        f"{module_line}"
         f"Component: {component.name}\n"
         f"Description: {component.description}\n"
         f"Tech stack: {', '.join(component.tech_stack)}\n"
@@ -51,6 +53,7 @@ def component_metadata(budget: Budget, component: BudgetComponent) -> dict:
     return {
         "budget_id": budget.budget_id,
         "component_id": component.component_id,
+        "module": component.module,
         "client_sector": budget.client_metadata.sector,
         "main_technology": budget.main_technology,
         "year": budget.year,
