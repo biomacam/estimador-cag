@@ -23,7 +23,7 @@ from app.dependencies import get_embedder, get_runtime_retrieval_config, get_tok
 from app.rag.context_assembler import build_context_block, truncate_to_token_budget
 from app.rag.errors import RagError, RetrievalError
 from app.rag.estimator import generate_estimate
-from app.rag.observability import get_request_id, log_stage
+from app.rag.observability import get_request_id, log_citation_report, log_stage
 from app.rag.query_reformulator import compose_search_text, reformulate_query
 from app.rag.rate_limiting import limiter
 from app.rag.retrieval.pipeline import retrieve as retrieve_chunks
@@ -38,7 +38,7 @@ from app.rag.schemas import (
     RetrievalResult,
 )
 from app.rag.security import require_estimate_key
-from app.rag.validation import check_coherence, validate_citations
+from app.rag.validation import check_coherence, verify_citations
 
 log = structlog.get_logger()
 
@@ -153,8 +153,11 @@ async def generate(request: Request, payload: GenerateRequest) -> GenerateResult
         log.error("stage_failed", stage="generation", error_type=type(exc).__name__)
         raise HTTPException(status_code=502, detail="Estimate generation failed.") from exc
 
+    report = verify_citations(estimate, {str(chunk.id) for chunk in payload.kept_chunks})
+    log_citation_report(report, request_id)
     return GenerateResult(
         estimate=estimate,
-        fabricated_source_ids=validate_citations(estimate, payload.kept_chunks),
+        fabricated_source_ids=report.dangling_citations,
+        citation_report=report,
         coherent=check_coherence(estimate),
     )

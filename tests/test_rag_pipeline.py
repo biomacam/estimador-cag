@@ -11,6 +11,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from structlog.testing import capture_logs
 
 import app.dependencies as deps
 import app.persistence.database as database
@@ -24,6 +25,7 @@ from app.rag.schemas import (
     RetrievalResult,
     RetrievedChunk,
     SourceCitation,
+    SourceReference,
     TaskItem,
     WorkModule,
 )
@@ -363,7 +365,20 @@ def _good_estimate(*, cited=1) -> Estimate:
         modules=[
             WorkModule(
                 name="Checkout",
-                tasks=[TaskItem(name="Cart & payment flow", engineer_days=18, sources=[cited])],
+                tasks=[
+                    TaskItem(
+                        name="Cart & payment flow",
+                        engineer_days=18,
+                        grounded=True,
+                        sources=[
+                            SourceReference(
+                                chunk_id=str(cited),
+                                document_id="BUD-2024-005",
+                                evidence="Estimated hours: 140",
+                            )
+                        ],
+                    )
+                ],
             )
         ],
         sources=[SourceCitation(source_id=cited, relevance="primary", used_for="checkout")],
@@ -462,10 +477,15 @@ def test_unrepaired_citations_downgrade_confidence_to_low(wire):
         retrieval=_found(1), estimates=[_good_estimate(cited=99), _good_estimate(cited=98)]
     )
 
-    result = asyncio.run(orch.estimate_from_transcript("x" * 200))
+    with capture_logs() as logs:
+        result = asyncio.run(orch.estimate_from_transcript("x" * 200))
 
     assert result.confidence == "low"
     assert calls["generate"] == 2
+    reports = [e for e in logs if e["event"] == "citation_report"]
+    assert [e["dangling_citations"] for e in reports] == [["99"], ["98"]]
+    assert all(e["log_level"] == "warning" for e in reports)
+    assert len({e["request_id"] for e in reports}) == 1
 
 
 def test_incoherent_insufficient_estimate_is_rejected_after_one_repair(wire):

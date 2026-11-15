@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +35,26 @@ def test_golden_relevant_budgets_exist_in_the_ingested_corpus():
         assert query["relevant_budget_ids"], query["id"]
         assert query["note"], query["id"]
         assert set(query["relevant_budget_ids"]) <= corpus_ids, query["id"]
+
+
+def test_generation_golden_extends_the_retrieval_golden_with_ground_truth():
+    generation = json.loads(
+        (ROOT / "evals" / "golden_generation_s11.json").read_text(encoding="utf-8")
+    )
+    retrieval = {q["id"]: q for q in _golden()["queries"]}
+
+    assert {q["id"] for q in generation["queries"]} == set(retrieval)
+    for case in generation["queries"]:
+        base = retrieval[case["id"]]
+        assert case["query"] == base["query"], case["id"]
+        assert case["relevant_budget_ids"] == base["relevant_budget_ids"], case["id"]
+        assert case["transcript"].strip() and case["ground_truth"].strip(), case["id"]
+        # Budgets used as sources must be annotated relevant; irrelevant ones may
+        # only appear in an "out of scope ... must NOT be added" sentence.
+        sentences = re.split(r"(?<=\.)\s+", case["ground_truth"])
+        used = " ".join(s for s in sentences if "out of scope" not in s)
+        for budget_id in set(re.findall(r"BUD-\d{4}-\d{3}", used)):
+            assert budget_id in base["relevant_budget_ids"], (case["id"], budget_id)
 
 
 def test_the_four_configurations_cover_every_search_and_rerank_combination():
