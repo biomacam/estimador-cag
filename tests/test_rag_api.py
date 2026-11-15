@@ -347,7 +347,8 @@ def test_generate_stage_reports_fabricated_citations(api, monkeypatch):
     monkeypatch.setattr(stages, "generate_estimate", fake_generate)
     body = api.post("/v1/estimate/stages/generate", json=_generate_payload(), headers=_h()).json()
 
-    assert body["fabricated_source_ids"] == [999]
+    assert body["fabricated_source_ids"] == ["999"]
+    assert body["citation_report"]["dangling_citations"] == ["999"]
     assert body["coherent"] is True
 
 

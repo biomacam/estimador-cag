@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy.dialects import postgresql
+from structlog.testing import capture_logs
 
 from app.rag.context_assembler import build_context_block, truncate_to_token_budget
+from app.rag.observability import log_citation_report
 from app.rag.prompt_builder import build_system_prompt, build_user_message
 from app.rag.query_reformulator import compose_search_text
 from app.rag.retrieval.fusion import reciprocal_rank_fusion
@@ -16,10 +18,11 @@ from app.rag.schemas import (
     EstimationQuery,
     RetrievedChunk,
     SourceCitation,
+    SourceReference,
     TaskItem,
     WorkModule,
 )
-from app.rag.validation import check_coherence, validate_citations
+from app.rag.validation import check_coherence, verify_citations
 
 
 class CharEncoder:
@@ -40,14 +43,27 @@ def _chunk(chunk_id: int, content: str = "Component: Auth\nEstimated hours: 120"
     )
 
 
-def _estimate(*, source_ids, task_sources, confidence="high") -> Estimate:
+def _ref(chunk_id: str, document_id: str = "BUD-2024-001") -> SourceReference:
+    return SourceReference(
+        chunk_id=chunk_id, document_id=document_id, evidence="Estimated hours: 120"
+    )
+
+
+def _estimate(*, source_ids, task_sources, confidence="high", grounded=True) -> Estimate:
     return Estimate(
         total_engineer_days=20,
         duration_weeks=4,
         modules=[
             WorkModule(
                 name="Authentication",
-                tasks=[TaskItem(name="Auth", engineer_days=20, sources=task_sources)],
+                tasks=[
+                    TaskItem(
+                        name="Auth",
+                        engineer_days=20 if grounded else None,
+                        grounded=grounded,
+                        sources=[_ref(cid) for cid in task_sources],
+                    )
+                ],
             )
         ],
         sources=[
@@ -62,17 +78,79 @@ def _estimate(*, source_ids, task_sources, confidence="high") -> Estimate:
 # --- validation ------------------------------------------------------------
 
 
-def test_validate_citations_all_valid():
-    assert validate_citations(_estimate(source_ids=[1, 2], task_sources=[1]), [_chunk(1), _chunk(2)]) == []
+def test_verify_citations_all_valid_reports_grounded():
+    report = verify_citations(_estimate(source_ids=[1, 2], task_sources=["1"]), {"1", "2"})
+
+    assert not report.has_dangling
+    assert (report.total_lines, report.grounded_lines) == (1, 1)
+    assert report.verified_citations == 3
+    assert report.lines[0].status == "grounded"
 
 
-def test_validate_citations_flags_top_level_and_task_level_fabrications():
-    estimate = _estimate(source_ids=[1, 99], task_sources=[42])
-    assert validate_citations(estimate, [_chunk(1), _chunk(2)]) == [42, 99]
+def test_verify_citations_flags_global_and_line_level_dangling_ids():
+    estimate = _estimate(source_ids=[1, 99], task_sources=["42"])
+
+    report = verify_citations(estimate, {"1", "2"})
+
+    assert report.dangling_citations == ["42", "99"]
+    assert (report.grounded_lines, report.dangling_lines) == (0, 1)
+    assert report.lines[0].status == "dangling"
+    assert report.lines[0].dangling_chunk_ids == ["42"]
 
 
-def test_validate_citations_empty_retrieval_flags_everything():
-    assert validate_citations(_estimate(source_ids=[1], task_sources=[2]), []) == [1, 2]
+def test_verify_citations_empty_retrieval_flags_everything():
+    report = verify_citations(_estimate(source_ids=[1], task_sources=["2"]), set())
+
+    assert report.dangling_citations == ["1", "2"]
+
+
+def test_verify_citations_marks_ungrounded_line_as_insufficient():
+    report = verify_citations(
+        _estimate(source_ids=[], task_sources=[], grounded=False), {"1"}
+    )
+
+    assert (report.insufficient_lines, report.grounded_lines) == (1, 0)
+    assert report.lines[0].status == "insufficient"
+    assert not report.has_dangling
+
+
+# --- line-level grounding integrity ----------------------------------------
+
+
+def test_grounded_line_requires_a_source():
+    with pytest.raises(ValueError, match="at least one source"):
+        TaskItem(name="Auth", engineer_days=10, grounded=True, sources=[])
+
+
+def test_ungrounded_line_cannot_carry_hours():
+    with pytest.raises(ValueError, match="engineer_days null"):
+        TaskItem(name="Auth", engineer_days=10, grounded=False)
+
+
+def test_ungrounded_line_cannot_carry_sources():
+    with pytest.raises(ValueError, match="must not carry sources"):
+        TaskItem(name="Auth", grounded=False, sources=[_ref("1")])
+
+
+def test_ungrounded_line_without_hours_is_valid():
+    task = TaskItem(name="Regulatory reporting", grounded=False)
+
+    assert task.engineer_days is None and task.sources == []
+
+
+def test_log_citation_report_warns_with_request_id_on_dangling_ids():
+    dirty = verify_citations(_estimate(source_ids=[1], task_sources=["42"]), {"1"})
+    clean = verify_citations(_estimate(source_ids=[1], task_sources=["1"]), {"1"})
+
+    with capture_logs() as logs:
+        log_citation_report(dirty, "req-1")
+        log_citation_report(clean, "req-2")
+
+    by_request = {entry["request_id"]: entry for entry in logs}
+    assert by_request["req-1"]["log_level"] == "warning"
+    assert by_request["req-1"]["dangling_citations"] == ["42"]
+    assert by_request["req-2"]["log_level"] == "info"
+    assert by_request["req-2"]["dangling_lines"] == 0
 
 
 def test_check_coherence_insufficient_shape():
@@ -89,7 +167,9 @@ def test_check_coherence_insufficient_shape():
     )
     assert check_coherence(ok) is True
     assert check_coherence(with_numbers) is False
-    assert check_coherence(_estimate(source_ids=[], task_sources=[], confidence="low")) is True
+    assert check_coherence(
+        _estimate(source_ids=[], task_sources=[], confidence="low", grounded=False)
+    ) is True
 
 
 # --- context assembler -----------------------------------------------------
@@ -98,11 +178,17 @@ def test_check_coherence_insufficient_shape():
 def test_build_context_block_wraps_chunks_in_order():
     block = build_context_block([_chunk(1, "first"), _chunk(2, "second")])
 
-    assert '<source id="1" sector="ecommerce" project_year="2024"' in block
+    assert '<source id="1" document_id="unknown" sector="ecommerce" project_year="2024"' in block
     assert 'distance="0.1230"' in block
     assert block.index('id="1"') < block.index('id="2"')
     assert block.strip().endswith("</source>")
     assert build_context_block([]) == ""
+
+
+def test_build_context_block_exposes_the_parent_budget_as_document_id():
+    chunk = _chunk(7).model_copy(update={"budget_id": "BUD-2024-005"})
+
+    assert 'document_id="BUD-2024-005"' in build_context_block([chunk])
 
 
 def test_truncate_keeps_whole_chunks_and_counts_the_xml_wrapper():

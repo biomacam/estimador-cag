@@ -16,12 +16,12 @@ import structlog
 from app.config import get_settings
 from app.rag.context_assembler import build_context_block, truncate_to_token_budget
 from app.rag.errors import GenerationError, MalformedEstimateError
-from app.rag.observability import log_stage
+from app.rag.observability import log_citation_report, log_stage
 from app.rag.prompt_builder import build_system_prompt, build_user_message
 from app.rag.query_reformulator import compose_search_text, reformulate_query
 from app.rag.retrieval.pipeline import retrieve
 from app.rag.schemas import Estimate, EstimationQuery
-from app.rag.validation import check_coherence, validate_citations
+from app.rag.validation import check_coherence, verify_citations
 
 log = structlog.get_logger()
 
@@ -180,17 +180,27 @@ async def estimate_from_transcript(
     with log_stage("generation", request_id, sources=len(kept)):
         estimate = await generate_estimate(context_block, structured_query=query)
 
-    # 6. Validate citations; one corrective retry on fabricated ids.
-    fabricated = validate_citations(estimate, kept)
-    if fabricated:
+    # 6. Verify per-line citations; one corrective retry on dangling ids.
+    retrieved_ids = {str(chunk.id) for chunk in kept}
+    report = verify_citations(estimate, retrieved_ids)
+    log_citation_report(report, request_id)
+    if report.has_dangling:
         feedback = (
-            f"your previous response cited invalid source ids: {fabricated}. "
-            "Only cite ids that appear in the <sources> block."
+            f"your previous response cited chunk_ids absent from the context: "
+            f"{report.dangling_citations}. Only cite the `id` attribute of <source> "
+            "elements that appear in the <sources> block, and copy the matching "
+            "document_id and a verbatim evidence span for each."
         )
-        with log_stage("citation_retry", request_id, fabricated=fabricated):
+        with log_stage("citation_retry", request_id, dangling=report.dangling_citations):
             estimate = await _generate(context_block, query, feedback=feedback)
-        if validate_citations(estimate, kept):
-            log.warning("citations_unrepaired", request_id=request_id)
+        report = verify_citations(estimate, retrieved_ids)
+        log_citation_report(report, request_id)
+        if report.has_dangling:
+            log.warning(
+                "citations_unrepaired",
+                request_id=request_id,
+                dangling_citations=report.dangling_citations,
+            )
             estimate = estimate.model_copy(update={"confidence": "low"})
 
     # 7. Coherence guard: one repair attempt, then reject.
