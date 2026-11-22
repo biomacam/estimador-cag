@@ -101,6 +101,20 @@ class Settings(BaseSettings):
     RERANK_TOP_N: int = Field(default=5, gt=0)
     RRF_K: int = Field(default=60, gt=0)
 
+    # --- Agentic estimator (manual Responses API loop) ---
+    # The agent drives a MANUAL tool loop over the raw OpenAI Responses API — the one
+    # deliberate exception to "everything goes through LLMWrapper". Plain defaults;
+    # scripts/run_agent_s12.py overrides them per invocation via CLI flags.
+    AGENT_MODEL: str = "gpt-5"
+    AGENT_REASONING_EFFORT: Literal["minimal", "low", "medium", "high"] = "medium"
+    # Safeguard on top of the natural stop (a turn with no more tool calls).
+    # One iteration == one Responses API round-trip.
+    AGENT_MAX_ITERATIONS: int = Field(default=10, ge=1)
+    # Retrieval knobs the search_budgets tool passes to retrieve(). The agent issues
+    # many narrow per-component queries, so it keeps fewer candidates per query.
+    AGENT_SEARCH_TOP_K: int = Field(default=5, gt=0)
+    AGENT_SEARCH_DISTANCE_THRESHOLD: float = 0.6
+
     @model_validator(mode="after")
     def _salt_must_be_set_in_production(self) -> "Settings":
         if self.APP_ENV == "production" and self.PSEUDONYM_HASH_SALT == "change-me-in-prod":

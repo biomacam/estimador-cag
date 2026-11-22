@@ -45,6 +45,11 @@ class RetrievedChunk(BaseModel):
     budget_id: str | None = Field(
         default=None, description="Traceable corpus id of the parent budget (from JSONB metadata)."
     )
+    estimated_hours: int | None = Field(
+        default=None,
+        description="Historical hours recorded for this chunk (from JSONB metadata); "
+        "None when the chunk carries no hours.",
+    )
 
 
 class RetrievalResult(BaseModel):

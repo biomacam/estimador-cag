@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import structlog
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from app.config import get_settings
 from app.embedding_pipeline.base import Chunker
@@ -38,6 +38,19 @@ def get_openai_client() -> OpenAI | None:
     if not settings.OPENAI_API_KEY:
         return None
     return OpenAI(api_key=settings.OPENAI_API_KEY)
+
+
+@lru_cache
+def get_async_openai_client() -> AsyncOpenAI | None:
+    """Lazy async OpenAI client for the agent loop (``app/agentic/agent_loop.py``).
+
+    The agent awaits the raw Responses API alongside the async ``retrieve()`` its
+    ``search_budgets`` tool wraps, so it needs an async client. ``None`` when no
+    OpenAI key is configured (the Responses API is OpenAI-only)."""
+    settings = get_settings()
+    if not settings.OPENAI_API_KEY:
+        return None
+    return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 @lru_cache

@@ -22,6 +22,7 @@ def row_to_chunk(row, *, distance: float) -> RetrievedChunk:
         chunk_type=row.chunk_type,
         distance=distance,
         budget_id=row.metadata_.get("budget_id"),
+        estimated_hours=row.metadata_.get("estimated_hours"),
     )
 
 
