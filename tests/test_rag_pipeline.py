@@ -124,7 +124,12 @@ def _row(chunk_id: int, *, distance: float = 0.3):
         document_id=chunk_id * 10,
         chunk_type="budget_component",
         content=f"chunk-{chunk_id}",
-        metadata_={"client_sector": "ecommerce", "year": 2024, "budget_id": f"BUD-{chunk_id}"},
+        metadata_={
+            "client_sector": "ecommerce",
+            "year": 2024,
+            "budget_id": f"BUD-{chunk_id}",
+            "estimated_hours": chunk_id * 40,
+        },
         distance=distance,
     )
 
@@ -180,6 +185,7 @@ def test_vector_mode_without_rerank_recalls_exactly_top_k(wire_store):
     assert result.low_confidence is False
     assert result.candidates_evaluated == 12
     assert result.chunks[0].budget_id == "BUD-1"
+    assert result.chunks[0].estimated_hours == 40
     assert store.vector_calls[0]["top_k"] == 2
     assert store.lexical_calls == []
 
